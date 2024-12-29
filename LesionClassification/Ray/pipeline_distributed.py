@@ -393,14 +393,14 @@ def test(model, test_loader):
 def distributed_pipeline(tabular_data_path, image_folder):
     
     # Import the tabular_data as dataframe
-    tabular_data = load_tabular_data_hdfs(hdfs_host="192.168.0.1", hdfs_port=50000, file_path=tabular_data_path)
+    tabular_data = load_tabular_data_hdfs(hdfs_host="192.168.0.1", hdfs_port=9000, file_path=tabular_data_path)
     
     # Preprocess the tabular data
     preprocessed_data = preprocessing(tabular_data)
     
     # Extract the feature vectors
     #feature_vectors, image_ids = feature_vector_extraction(preprocessed_data, image_folder)
-    #feature_vectors, image_ids = feature_vector_extraction_hdfs(preprocessed_data, hdfs_host="192.168.0.1", hdfs_port=50000, image_folder=image_folder)
+    #feature_vectors, image_ids = feature_vector_extraction_hdfs(preprocessed_data, hdfs_host="192.168.0.1", hdfs_port=9000, image_folder=image_folder)
 
     
     # for testing
