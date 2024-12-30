@@ -116,13 +116,14 @@ def display_results(start_time, aggregated_results, config):
         f.write(results_text)
 
 # PageRank calculation in distributed mode
+# PageRank calculation in distributed mode
 def distributed_pagerank(rank, world_size):
     config = {
-    "datafile": "twitter7/twitter7_100mb.csv",  
-    "batch_size": 1024 * 1024 * 50,  
-    "hdfs_host": '192.168.0.1',
-    "hdfs_port": 9000
-}
+        "datafile": "twitter7/twitter7_100mb.csv",  
+        "batch_size": 1024 * 1024 * 50,  
+        "hdfs_host": '192.168.0.1',
+        "hdfs_port": 9000
+    }
     setup(rank, world_size)
     hdfs = fs.HadoopFileSystem(host=config['hdfs_host'], port=config['hdfs_port'])
     file_to_read = f'/data/{config["datafile"]}'
@@ -140,7 +141,15 @@ def distributed_pagerank(rank, world_size):
 
             for batch in dataloader:
                 pr_input, nodes = format_input(batch)
-                pr_input = normalize_adj(pr_input)
+                
+                # Debugging to check tensor shape
+                print(f"\n[Rank {rank}] Batch {i} - Edge Index Shape: {pr_input.shape}")
+                print(f"[Rank {rank}] Batch {i} - Edge Index (Sample): {pr_input[:, :10]}")
+
+                # Ensure tensor shape before calling page_rank
+                if pr_input.shape[0] != 2:
+                    raise ValueError(f"[Rank {rank}] Invalid edge_index shape: {pr_input.shape}. Expected [2, N].")
+                
                 pr_scores = page_rank(edge_index=pr_input).tolist()
                 global_results = {nodes[idx]: pr_scores[idx] for idx in range(len(nodes))}
 
@@ -159,6 +168,7 @@ def distributed_pagerank(rank, world_size):
         display_results(start_time, aggregated_results, config)
 
     cleanup()
+
 
 if __name__ == "__main__":
     rank = int(os.getenv('RANK'))
