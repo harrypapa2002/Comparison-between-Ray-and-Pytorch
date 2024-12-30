@@ -26,11 +26,13 @@ class GraphDataset(Dataset):
     def __getitem__(self, idx):
         return self.edges[:, idx]
 
+
 # Distributed setup for VMs
 def setup(rank, world_size):
     os.environ['MASTER_ADDR'] = '192.168.0.1'
     os.environ['MASTER_PORT'] = '12345'
     dist.init_process_group("gloo", rank=rank, world_size=world_size)
+
 
 # Clean up process group and intermediate files
 def cleanup():
@@ -40,6 +42,7 @@ def cleanup():
     if os.path.exists(temp_dir):
         for file in os.listdir(temp_dir):
             os.remove(os.path.join(temp_dir, file))
+
 
 # Map nodes to consecutive indices using torch.unique
 def format_input(chunk):
@@ -60,12 +63,31 @@ def format_input(chunk):
     return torch.stack([nodes1_tensor, nodes2_tensor], dim=0), all_nodes
 
 
+# Manually normalize adjacency matrix
+def normalize_adj_manual(edge_index, num_nodes):
+    values = torch.ones(edge_index.size(1), dtype=torch.float32)
+    adj = torch.sparse_coo_tensor(
+        indices=edge_index,
+        values=values,
+        size=(num_nodes, num_nodes)
+    )
+    col_sum = torch.sparse.sum(adj, dim=0).to_dense()  # Dense sum of columns
+    col_sum[col_sum == 0] = 1  # Avoid division by zero
+    normalized_values = values / col_sum[edge_index[1]]  # Normalize by column sum
 
-# Save intermediate PageRank results using tensor serialization for faster I/O
+    return torch.sparse_coo_tensor(
+        indices=edge_index,
+        values=normalized_values,
+        size=(num_nodes, num_nodes)
+    )
+
+
+# Save intermediate PageRank results using tensor serialization
 def save_partial_results(results, chunk_id):
     path = '~/Comparison-between-Ray-and-Pytorch/PageRank/intermediate_results'
     os.makedirs(os.path.expanduser(path), exist_ok=True)
     torch.save(results, os.path.expanduser(f'{path}/result_chunk_{chunk_id}.pt'))
+
 
 # Aggregate results from all chunks
 def aggregate_results():
@@ -78,18 +100,13 @@ def aggregate_results():
                 aggregated[node] = aggregated.get(node, 0) + score
     return aggregated
 
+
 # Normalize PageRank scores to sum to 1
 def normalize_results(results):
     total_score = sum(results.values())
     for node in results:
         results[node] /= total_score
     return results
-
-def normalize_adj(adj):
-    col_sum = adj.sum(dim=0)
-    col_sum[col_sum == 0] = 1  
-    adj = adj / col_sum
-    return adj
 
 
 # Display and save results to file on master node
@@ -108,19 +125,18 @@ def display_results(start_time, aggregated_results, config):
     )
     print(results_text)
 
-    # Save results to file
     directory = os.path.expanduser('~/Comparison-between-Ray-and-Pytorch/PageRank/results')
     os.makedirs(directory, exist_ok=True)
     file_name = f'{config["datafile"].split(".")[0]}_pagerank_results.txt'
     with open(f'{directory}/{file_name}', 'w') as f:
         f.write(results_text)
 
-# PageRank calculation in distributed mode
+
 # PageRank calculation in distributed mode
 def distributed_pagerank(rank, world_size):
     config = {
-        "datafile": "twitter7/twitter7_100mb.csv",  
-        "batch_size": 1024 * 1024 * 50,  
+        "datafile": "twitter7/twitter7_100mb.csv",
+        "batch_size": 1024 * 1024 * 50,
         "hdfs_host": '192.168.0.1',
         "hdfs_port": 9000
     }
@@ -141,15 +157,9 @@ def distributed_pagerank(rank, world_size):
 
             for batch in dataloader:
                 pr_input, nodes = format_input(batch)
-                
-                # Debugging to check tensor shape
-                print(f"\n[Rank {rank}] Batch {i} - Edge Index Shape: {pr_input.shape}")
-                print(f"[Rank {rank}] Batch {i} - Edge Index (Sample): {pr_input[:, :10]}")
+                num_nodes = torch.max(pr_input) + 1
+                pr_input = normalize_adj_manual(pr_input, num_nodes)
 
-                # Ensure tensor shape before calling page_rank
-                if pr_input.shape[0] != 2:
-                    raise ValueError(f"[Rank {rank}] Invalid edge_index shape: {pr_input.shape}. Expected [2, N].")
-                
                 pr_scores = page_rank(edge_index=pr_input).tolist()
                 global_results = {nodes[idx]: pr_scores[idx] for idx in range(len(nodes))}
 
@@ -158,10 +168,7 @@ def distributed_pagerank(rank, world_size):
                 global_results.clear()
                 gc.collect()
 
-    if global_results:
-        save_partial_results(global_results, 'final')
-
-    dist.barrier()  # Synchronize across nodes
+    save_partial_results(global_results, 'final')
 
     if rank == 0:
         aggregated_results = aggregate_results()
