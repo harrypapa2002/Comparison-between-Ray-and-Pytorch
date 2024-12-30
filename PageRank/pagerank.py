@@ -78,15 +78,37 @@ def normalize_adj_manual(edge_index, num_nodes):
         values=values,
         size=(num_nodes, num_nodes)
     )
+    
     col_sum = torch.sparse.sum(adj, dim=0).to_dense()
-    col_sum[col_sum == 0] = 1  # Avoid division by zero
+    
+    # Handle isolated nodes by setting column sum to 1
+    col_sum[col_sum == 0] = 1.0  
+    
+    # Normalize with clipping to avoid floating-point drift
     normalized_values = values / col_sum[edge_index[1]]
-
+    
+    # Adjust normalization to ensure exact sums (fix floating-point precision)
+    eps = 1e-6  # Tolerance level
+    normalized_values = torch.clamp(normalized_values, max=1.0)
+    correction = torch.sparse.sum(
+        torch.sparse_coo_tensor(
+            indices=edge_index,
+            values=normalized_values,
+            size=(num_nodes, num_nodes)
+        ), dim=0).to_dense()
+    
+    diff = 1.0 - correction
+    diff = torch.clamp(diff, -eps, eps)
+    
+    # Add correction to ensure columns sum exactly to 1.0
+    normalized_values += diff[edge_index[1]]
+    
     return torch.sparse_coo_tensor(
         indices=edge_index,
         values=normalized_values,
         size=(num_nodes, num_nodes)
     )
+
 
 
 # Save intermediate PageRank results using tensor serialization for faster I/O
