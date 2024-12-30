@@ -44,7 +44,7 @@ def cleanup():
             os.remove(os.path.join(temp_dir, file))
 
 
-# Map nodes to consecutive indices using torch.unique
+# Format input edges and map nodes to indices
 def format_input(chunk):
     nodes1 = chunk[:, 0].tolist()
     nodes2 = chunk[:, 1].tolist()
@@ -60,94 +60,45 @@ def format_input(chunk):
     nodes1_tensor = torch.tensor(mapped_nodes1, dtype=torch.int32)
     nodes2_tensor = torch.tensor(mapped_nodes2, dtype=torch.int32)
 
-    return torch.stack([nodes1_tensor, nodes2_tensor], dim=0), len(all_nodes)
-
-def add_self_loops(edge_index, num_nodes):
-    # Create a loop edge for each node
-    loop_index = torch.arange(0, num_nodes, dtype=torch.long).unsqueeze(0).repeat(2, 1)
-    
-    # Concatenate self-loops with the original edges
-    edge_index = torch.cat([edge_index, loop_index], dim=1)
-    return edge_index
-
-# Normalize adjacency matrix manually
-def normalize_adj_manual(edge_index, num_nodes):
-    values = torch.ones(edge_index.size(1), dtype=torch.float32)
-    adj = torch.sparse_coo_tensor(
-        indices=edge_index,
-        values=values,
-        size=(num_nodes, num_nodes)
-    )
-    
-    col_sum = torch.sparse.sum(adj, dim=0).to_dense()
-    
-    col_sum[col_sum == 0] = 1.0  
-    
-    normalized_values = values / col_sum[edge_index[1]]
-    
-    # Enforce exact column sums
-    correction = torch.sparse.sum(
-        torch.sparse_coo_tensor(
-            indices=edge_index,
-            values=normalized_values,
-            size=(num_nodes, num_nodes)
-        ), dim=0).to_dense()
-    
-    diff = 1.0 - correction
-    
-    # Apply correction to diagonal (self-loops)
-    loop_index = torch.arange(0, num_nodes, dtype=torch.long)
-    edge_index = torch.cat([edge_index, loop_index.unsqueeze(0).repeat(2, 1)], dim=1)
-    corrected_values = torch.cat([normalized_values, diff], dim=0)
-
-    # **Clip values to [0, 1] to avoid floating-point drift**
-    corrected_values = torch.clamp(corrected_values, min=0.0, max=1.0)
-    
-    return torch.sparse_coo_tensor(
-        indices=edge_index,
-        values=corrected_values,
-        size=(num_nodes, num_nodes)
-    )
+    return torch.stack([nodes1_tensor, nodes2_tensor], dim=0), all_nodes
 
 
+# Normalize final PageRank scores
+def normalize_pr(scores):
+    total_score = scores.sum()
+    return scores / total_score
 
 
-
-# Save intermediate PageRank results using tensor serialization for faster I/O
-def save_partial_results(results, chunk_id):
+# Save intermediate results
+def save_intermediate_results(results, chunk_id):
     path = '~/Comparison-between-Ray-and-Pytorch/PageRank/intermediate_results'
     os.makedirs(os.path.expanduser(path), exist_ok=True)
-    torch.save(results, os.path.expanduser(f'{path}/result_chunk_{chunk_id}.pt'))
+    with open(os.path.expanduser(f'{path}/result_chunk_{chunk_id}.json'), 'w') as f:
+        json.dump(results, f)
 
 
-# Aggregate results from all chunks
+# Aggregate intermediate results
 def aggregate_results():
-    directory = os.path.expanduser('~/Comparison-between-Ray-and-Pytorch/PageRank/results')
+    directory = os.path.expanduser('~/Comparison-between-Ray-and-Pytorch/PageRank/intermediate_results')
     aggregated = {}
     for file in os.listdir(directory):
-        if file.endswith('.pt'):
-            chunk_results = torch.load(os.path.join(directory, file))
-            for node, score in chunk_results.items():
-                aggregated[node] = aggregated.get(node, 0) + score
+        if file.endswith('.json'):
+            with open(os.path.join(directory, file), 'r') as f:
+                chunk_results = json.load(f)
+                for node, score in chunk_results.items():
+                    aggregated[node] = aggregated.get(node, 0) + score
     return aggregated
 
 
-# Normalize PageRank scores to sum to 1
-def normalize_results(results):
-    total_score = sum(results.values())
-    for node in results:
-        results[node] /= total_score
-    return results
-
-
-# Display and save results to file on master node
+# Display and save results to file
 def display_results(start_time, aggregated_results, config):
     end_time = time.time()
     execution_time = end_time - start_time
 
-    normalized_results = normalize_results(aggregated_results)
-    top_nodes = dict(sorted(normalized_results.items(), key=lambda item: item[1], reverse=True)[:10])
-    memory_usage = psutil.Process(os.getpid()).memory_info().rss / (1024 * 1024)  # Memory usage in MB
+    normalized_results = normalize_pr(torch.tensor(list(aggregated_results.values())))
+    top_nodes = dict(sorted(zip(aggregated_results.keys(), normalized_results.tolist()),
+                             key=lambda item: item[1], reverse=True)[:10])
+    memory_usage = psutil.Process(os.getpid()).memory_info().rss / (1024 * 1024)
 
     results_text = (
         f"Execution Time (seconds): {execution_time:.2f}\n"
@@ -163,7 +114,7 @@ def display_results(start_time, aggregated_results, config):
         f.write(results_text)
 
 
-# PageRank calculation in distributed mode
+# Distributed PageRank computation
 def distributed_pagerank(rank, world_size):
     config = {
         "datafile": "twitter7/twitter7_100mb.csv",
@@ -179,27 +130,24 @@ def distributed_pagerank(rank, world_size):
     global_results = {}
 
     with hdfs.open_input_file(file_to_read) as file:
-        block_size = config['batch_size']
-        reader = pv.open_csv(file, read_options=pv.ReadOptions(block_size=block_size))
+        reader = pv.open_csv(file, read_options=pv.ReadOptions(block_size=config['batch_size']))
         for i, chunk in enumerate(reader):
             dataset = GraphDataset(chunk)
             sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank, shuffle=False)
             dataloader = DataLoader(dataset, batch_size=1024 * 1024, sampler=sampler)
 
             for batch in dataloader:
-                pr_input, num_nodes = format_input(batch)
-                pr_input = add_self_loops(pr_input, num_nodes)
-                adj = normalize_adj_manual(pr_input, num_nodes)
-                pr_scores = page_rank(adj=adj).tolist()
-                global_results = {idx: pr_scores[idx] for idx in range(len(pr_scores))}
+                pr_input, nodes = format_input(batch)
+                pr_scores = page_rank(edge_index=pr_input).tolist()
+                global_results.update({node: pr_scores[idx] for idx, node in enumerate(nodes)})
 
             if i % 10 == 0:
-                save_partial_results(global_results, i)
+                save_intermediate_results(global_results, i)
                 global_results.clear()
                 gc.collect()
 
     if global_results:
-        save_partial_results(global_results, 'final')
+        save_intermediate_results(global_results, 'final')
 
     if rank == 0:
         aggregated_results = aggregate_results()
