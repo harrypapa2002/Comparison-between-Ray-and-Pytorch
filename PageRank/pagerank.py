@@ -81,15 +81,13 @@ def normalize_adj_manual(edge_index, num_nodes):
     
     col_sum = torch.sparse.sum(adj, dim=0).to_dense()
     
-    # Handle isolated nodes by setting column sum to 1
+    # Set isolated node sums to 1 (self-loops)
     col_sum[col_sum == 0] = 1.0  
     
-    # Normalize with clipping to avoid floating-point drift
+    # Normalize adjacency matrix
     normalized_values = values / col_sum[edge_index[1]]
     
-    # Adjust normalization to ensure exact sums (fix floating-point precision)
-    eps = 1e-6  # Tolerance level
-    normalized_values = torch.clamp(normalized_values, max=1.0)
+    # Enforce exact column sums
     correction = torch.sparse.sum(
         torch.sparse_coo_tensor(
             indices=edge_index,
@@ -98,16 +96,18 @@ def normalize_adj_manual(edge_index, num_nodes):
         ), dim=0).to_dense()
     
     diff = 1.0 - correction
-    diff = torch.clamp(diff, -eps, eps)
     
-    # Add correction to ensure columns sum exactly to 1.0
-    normalized_values += diff[edge_index[1]]
-    
+    # Apply the correction to the diagonal (self-loops)
+    loop_index = torch.arange(0, num_nodes, dtype=torch.long)
+    edge_index = torch.cat([edge_index, loop_index.unsqueeze(0).repeat(2, 1)], dim=1)
+    corrected_values = torch.cat([normalized_values, diff], dim=0)
+
     return torch.sparse_coo_tensor(
         indices=edge_index,
-        values=normalized_values,
+        values=corrected_values,
         size=(num_nodes, num_nodes)
     )
+
 
 
 
