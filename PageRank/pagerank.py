@@ -25,14 +25,16 @@ class GraphDataset(Dataset):
 
     def __getitem__(self, idx):
         return self.edges[:, idx]
-#Test for commits
 
+
+# Distributed setup for VMs
 def setup(rank, world_size):
     os.environ['MASTER_ADDR'] = '192.168.0.1'
     os.environ['MASTER_PORT'] = '12345'
     dist.init_process_group("gloo", rank=rank, world_size=world_size)
 
 
+# Clean up process group and intermediate files
 def cleanup():
     dist.destroy_process_group()
     temp_dir = '~/Comparison-between-Ray-and-Pytorch/TriangleCount/intermediate_results'
@@ -42,6 +44,7 @@ def cleanup():
             os.remove(os.path.join(temp_dir, file))
 
 
+# Map nodes to consecutive indices using torch.unique
 def format_input(chunk):
     nodes1 = chunk[:, 0].tolist()
     nodes2 = chunk[:, 1].tolist()
@@ -60,6 +63,7 @@ def format_input(chunk):
     return torch.stack([nodes1_tensor, nodes2_tensor], dim=0), len(all_nodes)
 
 
+# Normalize adjacency matrix manually
 def normalize_adj_manual(edge_index, num_nodes):
     values = torch.ones(edge_index.size(1), dtype=torch.float32)
     adj = torch.sparse_coo_tensor(
@@ -78,12 +82,14 @@ def normalize_adj_manual(edge_index, num_nodes):
     )
 
 
+# Save intermediate PageRank results using tensor serialization for faster I/O
 def save_partial_results(results, chunk_id):
     path = '~/Comparison-between-Ray-and-Pytorch/PageRank/intermediate_results'
     os.makedirs(os.path.expanduser(path), exist_ok=True)
     torch.save(results, os.path.expanduser(f'{path}/result_chunk_{chunk_id}.pt'))
 
 
+# Aggregate results from all chunks
 def aggregate_results():
     directory = os.path.expanduser('~/Comparison-between-Ray-and-Pytorch/PageRank/results')
     aggregated = {}
@@ -95,6 +101,7 @@ def aggregate_results():
     return aggregated
 
 
+# Normalize PageRank scores to sum to 1
 def normalize_results(results):
     total_score = sum(results.values())
     for node in results:
@@ -102,6 +109,7 @@ def normalize_results(results):
     return results
 
 
+# Display and save results to file on master node
 def display_results(start_time, aggregated_results, config):
     end_time = time.time()
     execution_time = end_time - start_time
@@ -124,6 +132,7 @@ def display_results(start_time, aggregated_results, config):
         f.write(results_text)
 
 
+# PageRank calculation in distributed mode
 def distributed_pagerank(rank, world_size):
     config = {
         "datafile": "twitter7/twitter7_100mb.csv",
@@ -148,9 +157,8 @@ def distributed_pagerank(rank, world_size):
 
             for batch in dataloader:
                 pr_input, num_nodes = format_input(batch)
-                pr_input = normalize_adj_manual(pr_input, num_nodes)
-
-                pr_scores = page_rank(edge_index=pr_input).tolist()
+                adj = normalize_adj_manual(pr_input, num_nodes)
+                pr_scores = page_rank(adj=adj).tolist()
                 global_results = {idx: pr_scores[idx] for idx in range(len(pr_scores))}
 
             if i % 10 == 0:
