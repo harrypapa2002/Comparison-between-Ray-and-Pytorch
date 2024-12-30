@@ -103,7 +103,7 @@ def distributed_pagerank(rank, world_size):
     "datafile": "twitter7/twitter7_100mb.csv",  
     "batch_size": 1024 * 1024 * 50,  
     "hdfs_host": '192.168.0.1',
-    "hdfs_port": 50000
+    "hdfs_port": 9000
 }
     setup(rank, world_size)
     hdfs = fs.HadoopFileSystem(host=config['hdfs_host'], port=config['hdfs_port'])
