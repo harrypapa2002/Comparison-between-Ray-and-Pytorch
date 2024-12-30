@@ -102,9 +102,9 @@ data_file_3 = r'C:\Users\anton\Desktop\Pytorch data\twitter7_1mb.csv'
 #reduce_file_size(mtx_file, data_file, 10)      # 10GB version
 #reduce_file_size(mtx_file, data_file_1, 1)     # 1GB version
 #reduce_file_size(mtx_file, data_file_2, 2.5)   # 2.5GB version
-reduce_file_size(mtx_file, data_test, 0.1)     # 100MB test version
+#reduce_file_size(mtx_file, data_test, 0.1)     # 100MB test version
 
 
 #reduce_file_size(mtx_file, data_file_3, 0.001)     # 1MB test version
 
-read_after_comments(data_file_3, 30)
+read_after_comments(data_test, 30)
