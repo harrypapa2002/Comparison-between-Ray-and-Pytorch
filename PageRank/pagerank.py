@@ -10,7 +10,7 @@ import pyarrow.fs as fs
 import pyarrow.csv as pv
 import psutil
 
-# Custom Dataset to handle graph edges in chunks
+
 class GraphDataset(Dataset):
     def __init__(self, chunk):
         self.edges = self.format_edges(chunk)
@@ -27,14 +27,12 @@ class GraphDataset(Dataset):
         return self.edges[:, idx]
 
 
-# Distributed setup for VMs
 def setup(rank, world_size):
     os.environ['MASTER_ADDR'] = '192.168.0.1'
     os.environ['MASTER_PORT'] = '12345'
     dist.init_process_group("gloo", rank=rank, world_size=world_size)
 
 
-# Clean up process group and intermediate files
 def cleanup():
     dist.destroy_process_group()
     temp_dir = '~/Comparison-between-Ray-and-Pytorch/TriangleCount/intermediate_results'
@@ -44,7 +42,6 @@ def cleanup():
             os.remove(os.path.join(temp_dir, file))
 
 
-# Map nodes to consecutive indices using torch.unique
 def format_input(chunk):
     nodes1 = chunk[:, 0].tolist()
     nodes2 = chunk[:, 1].tolist()
@@ -60,10 +57,9 @@ def format_input(chunk):
     nodes1_tensor = torch.tensor(mapped_nodes1, dtype=torch.int32)
     nodes2_tensor = torch.tensor(mapped_nodes2, dtype=torch.int32)
 
-    return torch.stack([nodes1_tensor, nodes2_tensor], dim=0), all_nodes
+    return torch.stack([nodes1_tensor, nodes2_tensor], dim=0), len(all_nodes)
 
 
-# Manually normalize adjacency matrix
 def normalize_adj_manual(edge_index, num_nodes):
     values = torch.ones(edge_index.size(1), dtype=torch.float32)
     adj = torch.sparse_coo_tensor(
@@ -71,9 +67,9 @@ def normalize_adj_manual(edge_index, num_nodes):
         values=values,
         size=(num_nodes, num_nodes)
     )
-    col_sum = torch.sparse.sum(adj, dim=0).to_dense()  # Dense sum of columns
+    col_sum = torch.sparse.sum(adj, dim=0).to_dense()
     col_sum[col_sum == 0] = 1  # Avoid division by zero
-    normalized_values = values / col_sum[edge_index[1]]  # Normalize by column sum
+    normalized_values = values / col_sum[edge_index[1]]
 
     return torch.sparse_coo_tensor(
         indices=edge_index,
@@ -82,14 +78,12 @@ def normalize_adj_manual(edge_index, num_nodes):
     )
 
 
-# Save intermediate PageRank results using tensor serialization
 def save_partial_results(results, chunk_id):
     path = '~/Comparison-between-Ray-and-Pytorch/PageRank/intermediate_results'
     os.makedirs(os.path.expanduser(path), exist_ok=True)
     torch.save(results, os.path.expanduser(f'{path}/result_chunk_{chunk_id}.pt'))
 
 
-# Aggregate results from all chunks
 def aggregate_results():
     directory = os.path.expanduser('~/Comparison-between-Ray-and-Pytorch/PageRank/results')
     aggregated = {}
@@ -101,7 +95,6 @@ def aggregate_results():
     return aggregated
 
 
-# Normalize PageRank scores to sum to 1
 def normalize_results(results):
     total_score = sum(results.values())
     for node in results:
@@ -109,7 +102,6 @@ def normalize_results(results):
     return results
 
 
-# Display and save results to file on master node
 def display_results(start_time, aggregated_results, config):
     end_time = time.time()
     execution_time = end_time - start_time
@@ -132,7 +124,6 @@ def display_results(start_time, aggregated_results, config):
         f.write(results_text)
 
 
-# PageRank calculation in distributed mode
 def distributed_pagerank(rank, world_size):
     config = {
         "datafile": "twitter7/twitter7_100mb.csv",
@@ -156,19 +147,19 @@ def distributed_pagerank(rank, world_size):
             dataloader = DataLoader(dataset, batch_size=1024 * 1024, sampler=sampler)
 
             for batch in dataloader:
-                pr_input, nodes = format_input(batch)
-                num_nodes = torch.max(pr_input) + 1
+                pr_input, num_nodes = format_input(batch)
                 pr_input = normalize_adj_manual(pr_input, num_nodes)
 
                 pr_scores = page_rank(edge_index=pr_input).tolist()
-                global_results = {nodes[idx]: pr_scores[idx] for idx in range(len(nodes))}
+                global_results = {idx: pr_scores[idx] for idx in range(len(pr_scores))}
 
             if i % 10 == 0:
                 save_partial_results(global_results, i)
                 global_results.clear()
                 gc.collect()
 
-    save_partial_results(global_results, 'final')
+    if global_results:
+        save_partial_results(global_results, 'final')
 
     if rank == 0:
         aggregated_results = aggregate_results()
