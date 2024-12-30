@@ -28,7 +28,7 @@ def read_after_comments(file_path, num_lines=50):
         print(f"An error occurred while reading the file: {e}")
 
 def reduce_file_size(input, data, target_size_gb):
-    target_size = target_size_gb * (1024**3)  
+    target_size = target_size_gb * (1024**3)  # Convert GB to bytes
     size = 0
 
     os.makedirs(os.path.dirname(data), exist_ok=True)
@@ -37,11 +37,20 @@ def reduce_file_size(input, data, target_size_gb):
         with open(input, 'r') as input_file, open(data, 'w') as data_file:
             data_file.write("node1,node2\n")
 
+            first_line_skipped = False  # Track if the first 3-value line is skipped
+
             for line in input_file:
+                # Skip comment lines and the first data line with 3 values
                 if line.startswith('%') or line.startswith('#'):
                     continue
-                
-                csv_line = ','.join(line.strip().split()) + '\n'
+
+                # Check for three-column first line (e.g., 41652230 41652230 1468365182)
+                if not first_line_skipped and len(line.strip().split()) == 3:
+                    first_line_skipped = True
+                    continue  # Skip the first line with 3 columns
+
+                # Process the remaining two-column lines
+                csv_line = ','.join(line.strip().split()[:2]) + '\n'
                 data_file.write(csv_line)
 
                 size += len(line.encode('utf-8'))
@@ -81,6 +90,7 @@ data_file = r'C:\Users\anton\Desktop\Pytorch data\twitter7_10gb.csv'
 data_file_1 = r'C:\Users\anton\Desktop\Pytorch data\twitter7_1gb.csv'
 data_file_2 = r'C:\Users\anton\Desktop\Pytorch data\twitter7_2.5gb.csv'
 data_test = r'C:\Users\anton\Desktop\Pytorch data\twitter7_100mb.csv'
+data_file_3 = r'C:\Users\anton\Desktop\Pytorch data\twitter7_1mb.csv'
 
 # Uncomment to extract and inspect the file
 # unzip_twitter_mtx(zip_path, extract_to)
@@ -88,10 +98,13 @@ data_test = r'C:\Users\anton\Desktop\Pytorch data\twitter7_100mb.csv'
 # get_file_size(mtx_file)
 
 # Resize the graph to different sizes and save to individual files
-reduce_file_size(mtx_file, data_file, 10)      # 10GB version
-reduce_file_size(mtx_file, data_file_1, 1)     # 1GB version
-reduce_file_size(mtx_file, data_file_2, 2.5)   # 2.5GB version
+
+#reduce_file_size(mtx_file, data_file, 10)      # 10GB version
+#reduce_file_size(mtx_file, data_file_1, 1)     # 1GB version
+#reduce_file_size(mtx_file, data_file_2, 2.5)   # 2.5GB version
 reduce_file_size(mtx_file, data_test, 0.1)     # 100MB test version
 
-# Example: Inspect the contents of one of the reduced files
-read_after_comments(data_file_1, 30)
+
+#reduce_file_size(mtx_file, data_file_3, 0.001)     # 1MB test version
+
+read_after_comments(data_file_3, 30)
