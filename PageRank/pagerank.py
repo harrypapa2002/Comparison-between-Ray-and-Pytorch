@@ -62,6 +62,13 @@ def format_input(chunk):
 
     return torch.stack([nodes1_tensor, nodes2_tensor], dim=0), len(all_nodes)
 
+def add_self_loops(edge_index, num_nodes):
+    # Create a loop edge for each node
+    loop_index = torch.arange(0, num_nodes, dtype=torch.long).unsqueeze(0).repeat(2, 1)
+    
+    # Concatenate self-loops with the original edges
+    edge_index = torch.cat([edge_index, loop_index], dim=1)
+    return edge_index
 
 # Normalize adjacency matrix manually
 def normalize_adj_manual(edge_index, num_nodes):
@@ -157,6 +164,7 @@ def distributed_pagerank(rank, world_size):
 
             for batch in dataloader:
                 pr_input, num_nodes = format_input(batch)
+                pr_input = add_self_loops(pr_input, num_nodes)
                 adj = normalize_adj_manual(pr_input, num_nodes)
                 pr_scores = page_rank(adj=adj).tolist()
                 global_results = {idx: pr_scores[idx] for idx in range(len(pr_scores))}
