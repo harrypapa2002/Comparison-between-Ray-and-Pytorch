@@ -29,7 +29,7 @@ class GraphDataset(Dataset):
 # Distributed setup for VMs
 def setup(rank, world_size):
     os.environ['MASTER_ADDR'] = '192.168.0.1'
-    os.environ['MASTER_PORT'] = '29500'
+    os.environ['MASTER_PORT'] = '12345'
     dist.init_process_group("gloo", rank=rank, world_size=world_size)
 
 # Clean up process group and intermediate files
@@ -52,13 +52,13 @@ def format_input(chunk):
 
 # Save intermediate PageRank results using tensor serialization for faster I/O
 def save_partial_results(results, chunk_id):
-    path = '~/PyTorch/pagerank/intermediate_results'
+    path = '~/Comparison-between-Ray-and-Pytorch/PageRank/intermediate_results'
     os.makedirs(os.path.expanduser(path), exist_ok=True)
     torch.save(results, os.path.expanduser(f'{path}/result_chunk_{chunk_id}.pt'))
 
 # Aggregate results from all chunks
 def aggregate_results():
-    directory = os.path.expanduser('~/PyTorch/pagerank/intermediate_results')
+    directory = os.path.expanduser('~/Comparison-between-Ray-and-Pytorch/PageRank/results')
     aggregated = {}
     for file in os.listdir(directory):
         if file.endswith('.pt'):
@@ -91,7 +91,7 @@ def display_results(start_time, aggregated_results, config):
     print(results_text)
 
     # Save results to file
-    directory = os.path.expanduser('~/PyTorch/pagerank/results')
+    directory = os.path.expanduser('~/Comparison-between-Ray-and-Pytorch/PageRank/results')
     os.makedirs(directory, exist_ok=True)
     file_name = f'{config["datafile"].split(".")[0]}_pagerank_results.txt'
     with open(f'{directory}/{file_name}', 'w') as f:
@@ -100,12 +100,11 @@ def display_results(start_time, aggregated_results, config):
 # PageRank calculation in distributed mode
 def distributed_pagerank(rank, world_size):
     config = {
-        "datafile": "data.csv",  # Adjust as needed
-        "batch_size": 1024 * 1024 * 50,  # 50MB chunks
-        "hdfs_host": '192.168.0.1',
-        "hdfs_port": 50000
-    }
-
+    "datafile": "twitter7/twitter7_100mb.csv",  
+    "batch_size": 1024 * 1024 * 50,  
+    "hdfs_host": '192.168.0.1',
+    "hdfs_port": 50000
+}
     setup(rank, world_size)
     hdfs = fs.HadoopFileSystem(host=config['hdfs_host'], port=config['hdfs_port'])
     file_to_read = f'/data/{config["datafile"]}'

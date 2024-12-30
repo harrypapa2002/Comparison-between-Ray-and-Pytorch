@@ -28,7 +28,7 @@ def read_after_comments(file_path, num_lines=50):
         print(f"An error occurred while reading the file: {e}")
 
 def reduce_file_size(input, data, target_size_gb):
-    target_size = target_size_gb * (1024**3)  # Convert GB to bytes
+    target_size = target_size_gb * (1024**3)  
     size = 0
 
     os.makedirs(os.path.dirname(data), exist_ok=True)
