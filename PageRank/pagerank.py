@@ -79,6 +79,13 @@ def normalize_results(results):
         results[node] /= total_score
     return results
 
+def normalize_adj(adj):
+    col_sum = adj.sum(dim=0)
+    col_sum[col_sum == 0] = 1  
+    adj = adj / col_sum
+    return adj
+
+
 # Display and save results to file on master node
 def display_results(start_time, aggregated_results, config):
     end_time = time.time()
@@ -127,6 +134,7 @@ def distributed_pagerank(rank, world_size):
 
             for batch in dataloader:
                 pr_input, nodes = format_input(batch)
+                pr_input = normalize_adj(pr_input)
                 pr_scores = page_rank(edge_index=pr_input).tolist()
                 global_results = {nodes[idx]: pr_scores[idx] for idx in range(len(nodes))}
 
