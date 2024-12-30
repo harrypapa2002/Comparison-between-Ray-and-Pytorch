@@ -25,7 +25,7 @@ class GraphDataset(Dataset):
 
     def __getitem__(self, idx):
         return self.edges[:, idx]
-
+#Test for commits
 
 def setup(rank, world_size):
     os.environ['MASTER_ADDR'] = '192.168.0.1'
