@@ -43,16 +43,22 @@ def cleanup():
 
 # Map nodes to consecutive indices using torch.unique
 def format_input(chunk):
-    nodes1 = chunk[:, 0]  # Take all rows, first column
-    nodes2 = chunk[:, 1]  # Take all rows, second column
+    nodes1 = chunk[:, 0].tolist()
+    nodes2 = chunk[:, 1].tolist()
 
-    all_nodes = torch.cat([nodes1, nodes2])
+    all_nodes_set = set(nodes1 + nodes2)
+    all_nodes = list(all_nodes_set)
+    all_nodes.sort()
+    node_map = {node: idx for idx, node in enumerate(all_nodes)}
 
-    unique_nodes, inverse_indices = torch.unique(all_nodes, return_inverse=True)
-    mapped_nodes1 = inverse_indices[:len(nodes1)]
-    mapped_nodes2 = inverse_indices[len(nodes1):]
+    mapped_nodes1 = [node_map[node] for node in nodes1]
+    mapped_nodes2 = [node_map[node] for node in nodes2]
 
-    return torch.stack([mapped_nodes1, mapped_nodes2]), unique_nodes
+    nodes1_tensor = torch.tensor(mapped_nodes1, dtype=torch.int32)
+    nodes2_tensor = torch.tensor(mapped_nodes2, dtype=torch.int32)
+
+    return torch.stack([nodes1_tensor, nodes2_tensor], dim=0), all_nodes
+
 
 
 # Save intermediate PageRank results using tensor serialization for faster I/O
