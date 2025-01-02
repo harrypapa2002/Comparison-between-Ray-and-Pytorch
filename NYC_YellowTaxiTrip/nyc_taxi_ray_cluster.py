@@ -8,9 +8,8 @@ from sklearn.metrics import silhouette_score
 import folium
 import argparse
 import os
-import pyarrow as pa
+from pyarrow.fs import HadoopFileSystem
 import pyarrow.csv as pv
-import pyarrow.dataset as ds
 import logging
 
 # Configure logging
@@ -152,7 +151,7 @@ def process_files(file_paths, hdfs_host, hdfs_port, chunk_size, n_clusters, outp
 
     try:
         # Initialize HDFS filesystem connection
-        hdfs = pa.fs.HadoopFileSystem(host=hdfs_host, port=hdfs_port)
+        hdfs = HadoopFileSystem(host=hdfs_host, port=hdfs_port)
         logging.info(f"Connected to HDFS at {hdfs_host}:{hdfs_port}.")
     except Exception as e:
         logging.error(f"Failed to connect to HDFS: {e}")
