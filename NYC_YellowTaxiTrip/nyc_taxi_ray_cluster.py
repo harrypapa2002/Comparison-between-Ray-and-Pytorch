@@ -271,10 +271,9 @@ def main():
 
     # Initialize Ray with 4 CPUs and start the dashboard
     ray.init(
-        num_cpus=4,
         include_dashboard=True,
-        dashboard_host='0.0.0.0',  # Accessible from any IP address
-        dashboard_port=8265,       # Default port; change if needed
+        dashboard_host='0.0.0.0',
+        dashboard_port=8265,
         ignore_reinit_error=True
     )
 
