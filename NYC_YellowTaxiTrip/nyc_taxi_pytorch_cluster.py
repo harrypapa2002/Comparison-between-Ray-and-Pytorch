@@ -1,3 +1,4 @@
+import logging
 import os
 import time
 import torch
@@ -9,6 +10,8 @@ from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 import folium
 import argparse
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
 
 class KMeansClusterDataset(Dataset):
     def __init__(self, data):

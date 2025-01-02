@@ -240,7 +240,7 @@ def process_files(file_paths, hdfs_host, hdfs_port, chunk_size, n_clusters, outp
 
     # Plot cluster centers
     cluster_centers = [cluster["center"] for cluster in aggregated_clusters.values()]
-    plot_cluster_centers(cluster_centers, f"cluster_centers_combined.html")
+    plot_cluster_centers(cluster_centers, f"results/maps/cluster_centers_{os.path.basename(output_file)}.html")
 
     end_time = time.time()
     final_results["execution_time"] = end_time - start_time
@@ -281,7 +281,7 @@ def main():
         hdfs_port=args.hdfs_port,
         chunk_size=args.chunk_size,
         n_clusters=args.n_clusters,
-        output_file=args.output
+        output_file=f"results/{args.output}"
     )
 
     logging.info("Clustering process completed.")
