@@ -160,7 +160,7 @@ def process_files(file_paths, hdfs_host, hdfs_port, chunk_size, n_clusters, outp
     for file_path in file_paths:
         try:
             if not file_path.startswith(f"hdfs://{hdfs_host}:{hdfs_port}"):
-                file_path = f"hdfs://{hdfs_host}:{hdfs_port}{file_path.lstrip('hdfs:/')}"
+                file_path = f"hdfs://{hdfs_host}:{hdfs_port}/{file_path.lstrip('/')}"
 
             logging.info(f"Processing file: {file_path}")
             with hdfs.open_input_file(file_path) as file:
