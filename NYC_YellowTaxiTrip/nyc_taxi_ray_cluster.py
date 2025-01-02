@@ -269,8 +269,18 @@ def main():
     parser.add_argument('--output', type=str, default='ray_results.json', help='Output file to store execution results')
     args = parser.parse_args()
 
-    # Initialize Ray
-    ray.init(ignore_reinit_error=True)
+    # Initialize Ray with 4 CPUs and start the dashboard
+    ray.init(
+        num_cpus=4,
+        include_dashboard=True,
+        dashboard_host='0.0.0.0',  # Accessible from any IP address
+        dashboard_port=8265,       # Default port; change if needed
+        ignore_reinit_error=True
+    )
+
+    # Log Ray initialization details
+    logging.info("Ray initialized with 4 CPUs per node and dashboard enabled.")
+    logging.info(f"Ray Dashboard is available at http://localhost:8265")
 
     logging.info("Starting Ray-based KMeans clustering.")
 
@@ -285,6 +295,7 @@ def main():
 
     logging.info("Clustering process completed.")
     print(f"Results stored in {args.output}")
+    print("Ray Dashboard is running at http://localhost:8265")
 
 
 if __name__ == "__main__":
