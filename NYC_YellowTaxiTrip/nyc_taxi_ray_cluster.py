@@ -239,7 +239,7 @@ def main():
     """
     parser = argparse.ArgumentParser(description='Ray-based KMeans clustering on HDFS CSV files.')
     parser.add_argument('--files', nargs='+', required=True, help='List of HDFS CSV files to process (e.g., hdfs:///data/nyc_taxi/yellow_tripdata_2015-01.csv)')
-    parser.add_argument('--hdfs_host', type=str, default="83.212.76.26", help='HDFS Namenode host')
+    parser.add_argument('--hdfs_host', type=str, default="namenode", help='HDFS Namenode host')
     parser.add_argument('--hdfs_port', type=int, default=9000, help='HDFS Namenode port')
     parser.add_argument('--chunk_size', type=int, default=10000, help='Number of rows per chunk for processing')
     parser.add_argument('--n_clusters', type=int, default=40, help='Number of clusters for KMeans')
