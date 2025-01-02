@@ -164,8 +164,7 @@ def process_files(file_paths, hdfs_host, hdfs_port, chunk_size, n_clusters, outp
 
             logging.info(f"Processing file: {file_path}")
             with hdfs.open_input_file(file_path) as file:
-                # Define CSV read options to read in chunks
-                read_options = pv.ReadOptions(block_size=chunk_size * 100)  # Approximate block size
+                read_options = pv.ReadOptions(block_size=chunk_size * 100)
                 parse_options = pv.ParseOptions(delimiter=',')
                 convert_options = pv.ConvertOptions(strings_can_be_null=True)
 
@@ -177,13 +176,12 @@ def process_files(file_paths, hdfs_host, hdfs_port, chunk_size, n_clusters, outp
                     convert_options=convert_options
                 )
 
-                # Read CSV in batches
-                batch_iterator = csv_reader.to_batches()
+
                 logging.info(f"Reading CSV in chunks of approximately {chunk_size} rows.")
 
                 # Process each batch
                 preprocess_tasks = []
-                for batch in batch_iterator:
+                for batch in csv_reader:
                     df_chunk = batch.to_pandas()
                     preprocess_tasks.append(preprocess_data.remote(df_chunk))
 
