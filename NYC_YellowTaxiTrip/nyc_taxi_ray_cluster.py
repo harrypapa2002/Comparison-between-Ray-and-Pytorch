@@ -222,16 +222,14 @@ def process_files(file_paths, hdfs_host, hdfs_port, chunk_size, n_clusters, outp
     logging.info(f"Combined DataFrame has {len(combined_df)} rows.")
 
     # Perform KMeans clustering on the combined data
-    cluster_result = ray.get(kmeans_cluster.remote(combined_df, n_clusters))
-
-    if cluster_result["cluster_data"] is None:
-        logging.error("Clustering failed.")
-        return final_results, 0
+    cluster_tasks = [kmeans_cluster.remote(chunk, n_clusters) for chunk in preprocessed_chunks]
+    cluster_results = ray.get(cluster_tasks)
 
     # Aggregate cluster data and metrics
-    aggregated_clusters, cluster_sizes, avg_silhouette = aggregate_clusters(
-        [cluster_result["cluster_data"]], [cluster_result["metrics"]], n_clusters
-    )
+    global_cluster_data = [result["cluster_data"] for result in cluster_results if result["cluster_data"]]
+    global_metrics = [result["metrics"] for result in cluster_results if result["metrics"]]
+    aggregated_clusters, cluster_sizes, avg_silhouette = aggregate_clusters(global_cluster_data, global_metrics,
+                                                                            n_clusters)
 
     # Store results
     final_results["clustering_results"].append({
