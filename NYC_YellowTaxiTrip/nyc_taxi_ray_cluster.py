@@ -264,22 +264,16 @@ def main():
     parser.add_argument('--files', nargs='+', required=True, help='List of HDFS CSV files to process (e.g., hdfs:///data/nyc_taxi/yellow_tripdata_2015-01.csv)')
     parser.add_argument('--hdfs_host', type=str, default="namenode", help='HDFS Namenode host')
     parser.add_argument('--hdfs_port', type=int, default=9000, help='HDFS Namenode port')
-    parser.add_argument('--chunk_size', type=int, default=10000, help='Number of rows per chunk for processing')
+    parser.add_argument('--chunk_size', type=int, default=5000, help='Number of rows per chunk for processing')
     parser.add_argument('--n_clusters', type=int, default=40, help='Number of clusters for KMeans')
     parser.add_argument('--output', type=str, default='ray_results.json', help='Output file to store execution results')
     args = parser.parse_args()
 
-    # Initialize Ray with 4 CPUs and start the dashboard
     ray.init(
-        include_dashboard=True,
-        dashboard_host='0.0.0.0',
-        dashboard_port=8265,
         ignore_reinit_error=True
     )
 
-    # Log Ray initialization details
-    logging.info("Ray initialized with 4 CPUs per node and dashboard enabled.")
-    logging.info(f"Ray Dashboard is available at http://localhost:8265")
+    logging.info("Ray initialized")
 
     logging.info("Starting Ray-based KMeans clustering.")
 
