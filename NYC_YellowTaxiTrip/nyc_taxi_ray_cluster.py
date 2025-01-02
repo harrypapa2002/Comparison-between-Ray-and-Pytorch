@@ -1,3 +1,5 @@
+import json
+
 import ray
 import pandas as pd
 import numpy as np
@@ -146,7 +148,7 @@ def process_files(file_paths, hdfs_host, hdfs_port, chunk_size, n_clusters, outp
     Processes multiple CSV files from HDFS: reads, preprocesses, clusters, and aggregates results.
     """
     start_time = time.time()
-    results = []
+    final_results = {"files_processed": len(file_paths), "execution_time": 0, "clustering_results": []}
 
     try:
         # Initialize HDFS filesystem connection
@@ -154,7 +156,7 @@ def process_files(file_paths, hdfs_host, hdfs_port, chunk_size, n_clusters, outp
         logging.info(f"Connected to HDFS at {hdfs_host}:{hdfs_port}.")
     except Exception as e:
         logging.error(f"Failed to connect to HDFS: {e}")
-        return results, 0
+        return final_results, 0
 
     for file_path in file_paths:
         try:
@@ -202,10 +204,10 @@ def process_files(file_paths, hdfs_host, hdfs_port, chunk_size, n_clusters, outp
                 aggregated_clusters, cluster_sizes, avg_silhouette = aggregate_clusters(global_cluster_data, global_metrics, n_clusters)
 
                 # Store results
-                results.append({
+                final_results["clustering_results"].append({
                     "file": os.path.basename(file_path),
-                    "clusters": aggregated_clusters,
-                    "silhouette": avg_silhouette
+                    "clusters": global_cluster_data,
+                    "metrics": global_metrics
                 })
 
                 # Plot cluster centers
@@ -217,18 +219,12 @@ def process_files(file_paths, hdfs_host, hdfs_port, chunk_size, n_clusters, outp
             continue
 
     end_time = time.time()
-    execution_time = end_time - start_time
+    final_results["execution_time"] = end_time - start_time
 
     # Append execution details to the output file
-    try:
-        with open(output_file, 'a') as f:
-            f.write(f"Nodes: {hdfs_host}, Files: {len(file_paths)}, Time: {execution_time}\n")
-        logging.info(f"Execution Time: {execution_time} seconds")
-        logging.info(f"Results stored in {output_file}")
-    except Exception as e:
-        logging.error(f"Failed to write to output file {output_file}: {e}")
-
-    return results, execution_time
+    with open(output_file, 'w') as f:
+        json.dump(final_results, f, indent=4)
+    logging.info(f"Results saved to {output_file}")
 
 def main():
     """
