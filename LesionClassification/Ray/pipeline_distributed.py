@@ -400,12 +400,12 @@ def distributed_pipeline(tabular_data_path, image_folder):
     
     # Extract the feature vectors
     #feature_vectors, image_ids = feature_vector_extraction(preprocessed_data, image_folder)
-    #feature_vectors, image_ids = feature_vector_extraction_hdfs(preprocessed_data, hdfs_host="192.168.0.1", hdfs_port=9000, image_folder=image_folder)
+    feature_vectors, image_ids = feature_vector_extraction_hdfs(preprocessed_data, hdfs_host="192.168.0.1", hdfs_port=9000, image_folder=image_folder)
 
     
     # for testing
-    feature_vectors = np.load("../feature_vectors_mb.npy")
-    image_ids = np.load("../image_ids_mb.npy", allow_pickle=True)
+    #feature_vectors = np.load("../feature_vectors_mb.npy")
+    #image_ids = np.load("../image_ids_mb.npy", allow_pickle=True)
     
     # Combine preprocessed tabular data with the corresponding feature vectors
     final_data, cnn_feature_columns = combine_fatures(feature_vectors, image_ids, preprocessed_data)
