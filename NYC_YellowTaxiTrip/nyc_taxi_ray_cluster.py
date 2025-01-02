@@ -1,7 +1,6 @@
 import ray
 import pandas as pd
 import numpy as np
-import datetime
 import time
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
@@ -19,7 +18,7 @@ def convert_to_unix(s):
     """
     Converts a datetime string to a Unix timestamp.
     """
-    return time.mktime(datetime.datetime.strptime(s, "%Y-%m-%d %H:%M:%S").timetuple())
+    return time.mktime(pd.to_datetime(s, format="%Y-%m-%d %H:%M:%S").timetuple())
 
 @ray.remote
 def preprocess_data(df):
