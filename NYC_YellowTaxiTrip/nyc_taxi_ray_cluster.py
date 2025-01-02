@@ -1,5 +1,4 @@
 import json
-
 import ray
 import pandas as pd
 import numpy as np
@@ -16,11 +15,13 @@ import logging
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s:%(message)s')
 
+
 def convert_to_unix(s):
     """
     Converts a datetime string to a Unix timestamp.
     """
     return time.mktime(pd.to_datetime(s, format="%Y-%m-%d %H:%M:%S").timetuple())
+
 
 @ray.remote
 def preprocess_data(df):
@@ -38,6 +39,7 @@ def preprocess_data(df):
     except Exception as e:
         logging.error(f"Preprocessing error: {e}")
         return pd.DataFrame()
+
 
 def remove_outliers(df):
     """
@@ -59,6 +61,7 @@ def remove_outliers(df):
         logging.error(f"Outlier removal error: {e}")
         return pd.DataFrame()
 
+
 @ray.remote
 def kmeans_cluster(data_chunk, n_clusters):
     """
@@ -79,15 +82,16 @@ def kmeans_cluster(data_chunk, n_clusters):
             cluster_points = data_points[labels == label]
             center = cluster_points.mean(axis=0)
             cluster_data.append({
-                "label": label,
-                "size": len(cluster_points),
+                "label": int(label),
+                "size": int(len(cluster_points)),
                 "center": center.tolist()
             })
 
-        return {"cluster_data": cluster_data, "metrics": {"silhouette": silhouette}}
+        return {"cluster_data": cluster_data, "metrics": {"silhouette": float(silhouette)}}
     except Exception as e:
         logging.error(f"KMeans clustering error: {e}")
         return {"cluster_data": None, "metrics": None}
+
 
 def aggregate_clusters(global_cluster_data, global_metrics, n_clusters):
     """
@@ -120,12 +124,13 @@ def aggregate_clusters(global_cluster_data, global_metrics, n_clusters):
     for label, points in global_clusters.items():
         points = np.array(points)
         final_clusters[label] = {
-            "size": len(points),
+            "size": int(len(points)),
             "center": points.mean(axis=0).tolist()
         }
 
-    avg_silhouette = np.mean(silhouettes) if silhouettes else -1
+    avg_silhouette = float(np.mean(silhouettes)) if silhouettes else -1
     return final_clusters, cluster_sizes, avg_silhouette
+
 
 def plot_cluster_centers(cluster_centers, output_path):
     """
@@ -143,12 +148,18 @@ def plot_cluster_centers(cluster_centers, output_path):
     except Exception as e:
         logging.error(f"Error plotting cluster centers: {e}")
 
+
 def process_files(file_paths, hdfs_host, hdfs_port, chunk_size, n_clusters, output_file):
     """
     Processes multiple CSV files from HDFS: reads, preprocesses, clusters, and aggregates results.
+    Concatenates all files before clustering.
     """
     start_time = time.time()
-    final_results = {"files_processed": len(file_paths), "execution_time": 0, "clustering_results": []}
+    final_results = {
+        "files_processed": len(file_paths),
+        "execution_time": 0,
+        "clustering_results": []
+    }
 
     try:
         # Initialize HDFS filesystem connection
@@ -157,6 +168,9 @@ def process_files(file_paths, hdfs_host, hdfs_port, chunk_size, n_clusters, outp
     except Exception as e:
         logging.error(f"Failed to connect to HDFS: {e}")
         return final_results, 0
+
+    # List to hold all preprocess tasks
+    preprocess_tasks = []
 
     for file_path in file_paths:
         try:
@@ -177,54 +191,70 @@ def process_files(file_paths, hdfs_host, hdfs_port, chunk_size, n_clusters, outp
                     convert_options=convert_options
                 )
 
-
                 logging.info(f"Reading CSV in chunks of approximately {chunk_size} rows.")
 
                 # Process each batch
-                preprocess_tasks = []
                 for batch in csv_reader:
                     df_chunk = batch.to_pandas()
                     preprocess_tasks.append(preprocess_data.remote(df_chunk))
-
-                # Retrieve preprocessed data
-                preprocessed_chunks = ray.get(preprocess_tasks)
-                logging.info(f"Preprocessed {len(preprocessed_chunks)} chunks.")
-
-                # Filter out empty DataFrames
-                preprocessed_chunks = [chunk for chunk in preprocessed_chunks if not chunk.empty]
-
-                # Perform KMeans clustering on each preprocessed chunk
-                cluster_tasks = [kmeans_cluster.remote(chunk, n_clusters) for chunk in preprocessed_chunks]
-                cluster_results = ray.get(cluster_tasks)
-                logging.info(f"Completed KMeans clustering on {len(cluster_results)} chunks.")
-
-                # Aggregate cluster data and metrics
-                global_cluster_data = [result["cluster_data"] for result in cluster_results if result["cluster_data"]]
-                global_metrics = [result["metrics"] for result in cluster_results if result["metrics"]]
-                aggregated_clusters, cluster_sizes, avg_silhouette = aggregate_clusters(global_cluster_data, global_metrics, n_clusters)
-
-                # Store results
-                final_results["clustering_results"].append({
-                    "file": os.path.basename(file_path),
-                    "clusters": global_cluster_data,
-                    "metrics": global_metrics
-                })
-
-                # Plot cluster centers
-                cluster_centers = [cluster["center"] for cluster in aggregated_clusters.values()]
-                plot_cluster_centers(cluster_centers, f"cluster_centers_{os.path.basename(file_path)}.html")
 
         except Exception as e:
             logging.error(f"Error processing file {file_path}: {e}")
             continue
 
+    if not preprocess_tasks:
+        logging.error("No preprocessing tasks were created. Exiting.")
+        return final_results, 0
+
+    # Retrieve preprocessed data
+    preprocessed_chunks = ray.get(preprocess_tasks)
+    logging.info(f"Preprocessed {len(preprocessed_chunks)} chunks.")
+
+    # Filter out empty DataFrames
+    preprocessed_chunks = [chunk for chunk in preprocessed_chunks if not chunk.empty]
+
+    if not preprocessed_chunks:
+        logging.error("No data to process after preprocessing.")
+        return final_results, 0
+
+    # Concatenate all preprocessed data
+    combined_df = pd.concat(preprocessed_chunks, ignore_index=True)
+    logging.info(f"Combined DataFrame has {len(combined_df)} rows.")
+
+    # Perform KMeans clustering on the combined data
+    cluster_result = ray.get(kmeans_cluster.remote(combined_df, n_clusters))
+
+    if cluster_result["cluster_data"] is None:
+        logging.error("Clustering failed.")
+        return final_results, 0
+
+    # Aggregate cluster data and metrics
+    aggregated_clusters, cluster_sizes, avg_silhouette = aggregate_clusters(
+        [cluster_result["cluster_data"]], [cluster_result["metrics"]], n_clusters
+    )
+
+    # Store results
+    final_results["clustering_results"].append({
+        "files": [os.path.basename(fp) for fp in file_paths],
+        "clusters": aggregated_clusters,
+        "metrics": {"average_silhouette": avg_silhouette}
+    })
+
+    # Plot cluster centers
+    cluster_centers = [cluster["center"] for cluster in aggregated_clusters.values()]
+    plot_cluster_centers(cluster_centers, f"cluster_centers_combined.html")
+
     end_time = time.time()
     final_results["execution_time"] = end_time - start_time
 
-    # Append execution details to the output file
+    # Append execution details to the output file with proper JSON serialization
     with open(output_file, 'w') as f:
-        json.dump(final_results, f, indent=4)
+        json.dump(final_results, f, indent=4, default=lambda o: int(o) if isinstance(o, np.integer)
+                                               else float(o) if isinstance(o, np.floating)
+                                               else o.tolist() if isinstance(o, np.ndarray)
+                                               else o)
     logging.info(f"Results saved to {output_file}")
+
 
 def main():
     """
@@ -236,10 +266,10 @@ def main():
     parser.add_argument('--hdfs_port', type=int, default=9000, help='HDFS Namenode port')
     parser.add_argument('--chunk_size', type=int, default=10000, help='Number of rows per chunk for processing')
     parser.add_argument('--n_clusters', type=int, default=40, help='Number of clusters for KMeans')
-    parser.add_argument('--output', type=str, default='ray_results.txt', help='Output file to store execution results')
+    parser.add_argument('--output', type=str, default='ray_results.json', help='Output file to store execution results')
     args = parser.parse_args()
 
-
+    # Initialize Ray
     ray.init(ignore_reinit_error=True)
 
     logging.info("Starting Ray-based KMeans clustering.")
@@ -255,6 +285,7 @@ def main():
 
     logging.info("Clustering process completed.")
     print(f"Results stored in {args.output}")
+
 
 if __name__ == "__main__":
     main()
