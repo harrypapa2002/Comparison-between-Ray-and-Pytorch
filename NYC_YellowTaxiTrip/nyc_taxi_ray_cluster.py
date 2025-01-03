@@ -274,7 +274,7 @@ def main():
     parser.add_argument('--files', nargs='+', required=True, help='List of HDFS CSV files to process (e.g., hdfs:///data/nyc_taxi/yellow_tripdata_2015-01.csv)')
     parser.add_argument('--hdfs_host', type=str, default="namenode", help='HDFS Namenode host')
     parser.add_argument('--hdfs_port', type=int, default=9000, help='HDFS Namenode port')
-    parser.add_argument('--block_size', type=int, default=20 * 1024 * 1024, help='Block size for reading CSV files')
+    parser.add_argument('--block_size', type=int, default=20* 1024 * 1024, help='Block size for reading CSV files')
     parser.add_argument('--n_clusters', type=int, default=40, help='Number of clusters for KMeans')
     parser.add_argument('--output', type=str, default='ray_results.json', help='Output file to store execution results')
     args = parser.parse_args()
