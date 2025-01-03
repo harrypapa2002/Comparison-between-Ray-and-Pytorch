@@ -117,7 +117,7 @@ def aggregate_clusters(global_cluster_data, global_metrics, n_clusters):
     for batch_data, metrics in zip(global_cluster_data, global_metrics):
         if batch_data:
             for cluster in batch_data:
-                logging.DEBUG(f"Cluster: {cluster}")
+                logging.info(f"Cluster: {cluster}")
                 all_centers.append(cluster["center"])
                 cluster_sizes[cluster["label"]] += cluster["size"]
         if metrics:
