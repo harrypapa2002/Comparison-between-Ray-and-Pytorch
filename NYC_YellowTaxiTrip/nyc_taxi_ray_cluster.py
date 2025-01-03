@@ -290,7 +290,7 @@ def main():
         hdfs_port=args.hdfs_port,
         chunk_size=args.chunk_size,
         n_clusters=args.n_clusters,
-        output_file=args.output
+        output_filename=args.output
     )
 
     logging.info("Clustering process completed.")
