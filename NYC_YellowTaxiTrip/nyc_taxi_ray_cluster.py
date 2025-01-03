@@ -36,11 +36,15 @@ def preprocess_data(df):
     Preprocesses the DataFrame by converting datetime fields to Unix timestamps,
     calculating trip times and speed, and removing outliers.
     """
+    df = df[['tpep_pickup_datetime', 'tpep_dropoff_datetime', 'pickup_latitude', 'pickup_longitude', 'dropoff_latitude',
+                'dropoff_longitude', 'trip_distance', 'total_amount']]
     try:
         df['pickup_unix'] = df['tpep_pickup_datetime'].map(convert_to_unix)
         df['dropoff_unix'] = df['tpep_dropoff_datetime'].map(convert_to_unix)
         df['trip_times'] = (df['dropoff_unix'] - df['pickup_unix']) / 60  # Trip time in minutes
         df['Speed'] = 60 * (df['trip_distance'] / df['trip_times'])  # Speed in mph
+        df = df[['pickup_latitude', 'pickup_longitude', 'dropoff_latitude', 'dropoff_longitude',
+                 'trip_times', 'trip_distance', 'Speed', 'total_amount']]
         df_cleaned = remove_outliers(df)
         return df_cleaned
     except Exception as e:
