@@ -42,9 +42,9 @@ def preprocess_data(df):
                  'pickup_longitude', 'dropoff_latitude', 'dropoff_longitude',
                  'trip_distance', 'total_amount']].copy()
 
-        # Convert datetime columns to Unix timestamps using NumPy
-        pickup_times = pd.to_datetime(df['tpep_pickup_datetime'], errors='coerce').values.astype(np.int64) // 10**9
-        dropoff_times = pd.to_datetime(df['tpep_dropoff_datetime'], errors='coerce').values.astype(np.int64) // 10**9
+        # Convert datetime strings to Unix timestamps
+        pickup_times = df['tpep_pickup_datetime'].map(convert_to_unix)
+        dropoff_times = df['tpep_dropoff_datetime'].map(convert_to_unix)
 
         # Handle invalid timestamps
         valid_rows = ~np.isnan(pickup_times) & ~np.isnan(dropoff_times)
