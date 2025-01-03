@@ -15,13 +15,13 @@ import logging
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s:%(message)s')
 
-
 def ensure_directories():
     """
     Ensures the results and maps directories exist.
     """
     os.makedirs("results", exist_ok=True)
     os.makedirs("maps", exist_ok=True)
+
 
 def convert_to_unix(s):
     """
@@ -31,22 +31,18 @@ def convert_to_unix(s):
 
 
 @ray.remote
-def preprocess_data(data):
+def preprocess_data(df):
     """
     Preprocesses the DataFrame by converting datetime fields to Unix timestamps,
     calculating trip times and speed, and removing outliers.
     """
     try:
-        # Select only necessary columns and create an explicit copy
-        data["pickup_unix"] = data["tpep_pickup_datetime"].map(convert_to_unix)
-        data["dropoff_unix"] = data["tpep_dropoff_datetime"].map(convert_to_unix)
-        data["trip_times"] = (data["dropoff_unix"] - data["pickup_unix"]) / 60
-        data["Speed"] = 60 * (data["trip_distance"] / data["trip_times"])
-        df_cleaned = remove_outliers(data)
-
-        logging.info(f"Preprocessed DataFrame with shape {df_cleaned.shape}")
+        df['pickup_unix'] = df['tpep_pickup_datetime'].map(convert_to_unix)
+        df['dropoff_unix'] = df['tpep_dropoff_datetime'].map(convert_to_unix)
+        df['trip_times'] = (df['dropoff_unix'] - df['pickup_unix']) / 60  # Trip time in minutes
+        df['Speed'] = 60 * (df['trip_distance'] / df['trip_times'])  # Speed in mph
+        df_cleaned = remove_outliers(df)
         return df_cleaned
-
     except Exception as e:
         logging.error(f"Preprocessing error: {e}")
         return pd.DataFrame()
@@ -57,21 +53,21 @@ def remove_outliers(df):
     Removes outliers based on predefined criteria and selects relevant columns.
     """
     try:
-        # Apply outlier filtering and create an explicit copy
-        df_cleaned = df[
-            ((df["dropoff_longitude"] >= -74.15) & (df["dropoff_longitude"] <= -73.7004) &
-             (df["dropoff_latitude"] >= 40.5774) & (df["dropoff_latitude"] <= 40.9176)) &
-            ((df["pickup_longitude"] >= -74.15) & (df["pickup_latitude"] >= 40.5774) &
-             (df["pickup_longitude"] <= -73.7004) & (df["pickup_latitude"] <= 40.9176)) &
-            (df["trip_times"] > 0) & (df["trip_times"] < 720) &
-            (df["trip_distance"] > 0) & (df["trip_distance"] < 23) &
-            (df["Speed"] <= 45.31) & (df["Speed"] >= 0) &
-            (df["total_amount"] > 0) & (df["total_amount"] < 1000)
-            ]
-        return df_cleaned[["pickup_latitude", "pickup_longitude"]]
+        df = df[
+            ((df.dropoff_longitude >= -74.15) & (df.dropoff_longitude <= -73.7004) &
+             (df.dropoff_latitude >= 40.5774) & (df.dropoff_latitude <= 40.9176)) &
+            ((df.pickup_longitude >= -74.15) & (df.pickup_longitude <= -73.7004) &
+             (df.pickup_latitude >= 40.5774) & (df.pickup_latitude <= 40.9176)) &
+            (df.trip_times > 0) & (df.trip_times < 720) &  # Trip times between 0 and 720 minutes
+            (df.trip_distance > 0) & (df.trip_distance < 23) &  # Trip distance between 0 and 23 miles
+            (df.Speed <= 45.31) & (df.Speed >= 0) &  # Speed between 0 and 45.31 mph
+            (df.total_amount < 1000) & (df.total_amount > 0)  # Total amount between $0 and $1000
+        ]
+        return df[['pickup_latitude', 'pickup_longitude']]
     except Exception as e:
         logging.error(f"Outlier removal error: {e}")
         return pd.DataFrame()
+
 
 @ray.remote
 def kmeans_cluster(data_chunk, n_clusters):
@@ -147,8 +143,9 @@ def plot_cluster_centers(cluster_centers, output_filename):
     """
     Plots cluster centers on a Folium map and saves it as an HTML file.
     """
+
+    output_path = os.path.join("maps", output_filename)
     try:
-        output_path = os.path.join("maps", output_filename)
         map_osm = folium.Map(location=[40.734695, -73.990372], zoom_start=12)
         for center in cluster_centers:
             folium.Marker(
@@ -161,14 +158,14 @@ def plot_cluster_centers(cluster_centers, output_filename):
         logging.error(f"Error plotting cluster centers: {e}")
 
 
-def process_files(file_paths, hdfs_host, hdfs_port, block_size, n_clusters, output_filename):
+def process_files(file_paths, hdfs_host, hdfs_port, batch_size, n_clusters, output_file):
     """
     Processes multiple CSV files from HDFS: reads, preprocesses, clusters, and aggregates results.
     Concatenates all files before clustering.
     """
-
     ensure_directories()
-    output_file = os.path.join("results", output_filename)
+
+    output_filepath = os.path.join("results", output_file)
 
     start_time = time.time()
     final_results = {
@@ -195,9 +192,9 @@ def process_files(file_paths, hdfs_host, hdfs_port, block_size, n_clusters, outp
 
             logging.info(f"Processing file: {file_path}")
             with hdfs.open_input_file(file_path) as file:
-                read_options = pv.ReadOptions(block_size=block_size)
+                read_options = pv.ReadOptions(block_size=batch_size)
                 parse_options = pv.ParseOptions(delimiter=',')
-                convert_options = pv.ConvertOptions(strings_can_be_null=True, column_types={"tolls_amount": "float64"})
+                convert_options = pv.ConvertOptions(strings_can_be_null=True)
 
                 # Create a CSV reader
                 csv_reader = pv.open_csv(
@@ -206,8 +203,6 @@ def process_files(file_paths, hdfs_host, hdfs_port, block_size, n_clusters, outp
                     parse_options=parse_options,
                     convert_options=convert_options
                 )
-
-                logging.info(f"Reading file {file_path} in chunks of {block_size} bytes.")
 
                 # Process each batch
                 for batch in csv_reader:
@@ -256,18 +251,18 @@ def process_files(file_paths, hdfs_host, hdfs_port, block_size, n_clusters, outp
 
     # Plot cluster centers
     cluster_centers = [cluster["center"] for cluster in aggregated_clusters.values()]
-    map_filename = f"cluster_centers_{os.path.basename(output_file).replace('.json', '.html')}"
-    plot_cluster_centers(cluster_centers, map_filename)
+    plot_cluster_centers(cluster_centers, f"cluster_centers_{output_file}.html")
 
     end_time = time.time()
     final_results["execution_time"] = end_time - start_time
 
-    with open(output_file, 'w') as f:
+    # Append execution details to the output file with proper JSON serialization
+    with open(output_filepath, 'w') as f:
         json.dump(final_results, f, indent=4, default=lambda o: int(o) if isinstance(o, np.integer)
                                                else float(o) if isinstance(o, np.floating)
                                                else o.tolist() if isinstance(o, np.ndarray)
                                                else o)
-    logging.info(f"Results saved to {output_file}")
+    logging.info(f"Results saved to {output_filepath}")
 
 
 def main():
@@ -278,10 +273,14 @@ def main():
     parser.add_argument('--files', nargs='+', required=True, help='List of HDFS CSV files to process (e.g., hdfs:///data/nyc_taxi/yellow_tripdata_2015-01.csv)')
     parser.add_argument('--hdfs_host', type=str, default="namenode", help='HDFS Namenode host')
     parser.add_argument('--hdfs_port', type=int, default=9000, help='HDFS Namenode port')
-    parser.add_argument('--block_size', type=int, default=20 * 1024 * 1024, help='Block size for reading CSV files')
+    parser.add_argument('--batch_size', type=int, default=20 * 1024 * 1024, help='Batch size in bytes')
     parser.add_argument('--n_clusters', type=int, default=40, help='Number of clusters for KMeans')
     parser.add_argument('--output', type=str, default='ray_results.json', help='Output file to store execution results')
     args = parser.parse_args()
+
+    ray.init(
+        ignore_reinit_error=True
+    )
 
     logging.info("Ray initialized")
 
@@ -291,13 +290,14 @@ def main():
         file_paths=args.files,
         hdfs_host=args.hdfs_host,
         hdfs_port=args.hdfs_port,
-        block_size=args.block_size,
+        batch_size=args.batch_size,
         n_clusters=args.n_clusters,
-        output_filename=args.output
+        output_file=args.output
     )
 
     logging.info("Clustering process completed.")
     print(f"Results stored in {args.output}")
+
 
 if __name__ == "__main__":
     main()
