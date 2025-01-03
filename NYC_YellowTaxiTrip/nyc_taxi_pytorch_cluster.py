@@ -161,12 +161,12 @@ def get_hdfs_file_system(hdfs_host, hdfs_port):
         return None
 
 # Function to read and preprocess data from HDFS
-def read_and_preprocess_files(hdfs, port, host, file_paths, batch_size, rank, world_size):
+def read_and_preprocess_files(hdfs, hdfs_host, hdfs_port, file_paths, batch_size, rank, world_size):
     preprocessed_chunks = []
     for file_path in file_paths:
         try:
-            if not file_path.startswith(f"hdfs://{host}:{port}"):
-                file_path = f"hdfs://{host}:{port}/{file_path.lstrip('/')}"
+            if not file_path.startswith(f"hdfs://{hdfs_host}:{hdfs_port}"):
+                file_path = f"hdfs://{hdfs_host}:{hdfs_port}/{file_path.lstrip('/')}"
             logging.info(f"Process {rank}: Processing file: {file_path}")
             with hdfs.open_input_file(file_path) as file:
                 read_options = pv.ReadOptions(block_size=batch_size)
@@ -228,7 +228,7 @@ def handle_results(all_cluster_data, all_metrics, n_clusters, output_file, start
     plot_cluster_centers(cluster_centers, f"cluster_centers_{output_file}.html")
 
 # Main processing function
-def process_files(rank, world_size, file_paths, hdfs_host, hdfs_port, batch_size, n_clusters, output_file):
+def process_files(rank, world_size, file_paths, hdfs_host, hdfs_port, read_block_size, data_loader_batch_size, n_clusters, output_file):
     setup(rank, world_size)
     ensure_directories()
     start_time = time.time()
@@ -240,7 +240,7 @@ def process_files(rank, world_size, file_paths, hdfs_host, hdfs_port, batch_size
         return
 
     # Read and preprocess data
-    combined_df = read_and_preprocess_files(hdfs, hdfs_host, hdfs_port, file_paths, batch_size, rank, world_size)
+    combined_df = read_and_preprocess_files(hdfs, hdfs_host, hdfs_port, file_paths, read_block_size, rank, world_size)
     if combined_df.empty:
         logging.error(f"Process {rank}: No data after preprocessing. Exiting.")
         cleanup()
@@ -249,7 +249,7 @@ def process_files(rank, world_size, file_paths, hdfs_host, hdfs_port, batch_size
     # Create Dataset and DataLoader
     dataset = KMeansClusterDataset(combined_df.values)
     sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank, shuffle=False)
-    dataloader = DataLoader(dataset, batch_size=batch_size, sampler=sampler, collate_fn=custom_collate_fn)
+    dataloader = DataLoader(dataset, batch_size=data_loader_batch_size, sampler=sampler, collate_fn=custom_collate_fn)
 
     # Perform clustering
     local_results = perform_clustering(dataloader, n_clusters)
@@ -267,8 +267,7 @@ def process_files(rank, world_size, file_paths, hdfs_host, hdfs_port, batch_size
         for proc_results in gathered_cluster_data:
             for result in proc_results:
                 if result["cluster_data"]:
-                    for _ in result["cluster_data"]:
-                        gathered_cluster_data.append(result["cluster_data"])
+                    gathered_cluster_data.extend(result["cluster_data"])
                 if result["metrics"]:
                     gathered_metrics.append(result["metrics"])
         handle_results(gathered_cluster_data, gathered_metrics, n_clusters, output_file, start_time)
@@ -281,16 +280,19 @@ def main():
     parser.add_argument('--files', nargs='+', required=True, help='List of HDFS CSV files to process (e.g., /data/nyc_taxi/yellow_tripdata_2015-01.csv)')
     parser.add_argument('--hdfs_host', type=str, default="namenode", help='HDFS Namenode host')
     parser.add_argument('--hdfs_port', type=int, default=9000, help='HDFS Namenode port')
-    parser.add_argument('--batch_size', type=int, default=1024 * 1024, help='Batch size in bytes')
+    parser.add_argument('--read_block_size', type=int, default=1048576, help='Batch size in bytes for HDFS reading')
+    parser.add_argument('--data_loader_batch_size', type=int, default=1024, help='Batch size (number of samples) for DataLoader')
     parser.add_argument('--n_clusters', type=int, default=40, help='Number of clusters for KMeans')
-    parser.add_argument('--nodes', type=int, default=1, help='Number of distributed nodes')
     parser.add_argument('--output', type=str, default='torch_results.json', help='Output file to store execution results')
     args = parser.parse_args()
 
-    # Set environment variables for distributed processing
-    os.environ['WORLD_SIZE'] = str(args.nodes)
-    rank = int(os.getenv('RANK', 0))
-    world_size = int(os.getenv('WORLD_SIZE', 1))
+    # Obtain rank and world_size from environment variables set by torchrun
+    rank = int(os.getenv('RANK', -1))
+    world_size = int(os.getenv('WORLD_SIZE', -1))
+
+    if rank == -1 or world_size == -1:
+        logging.error("RANK and WORLD_SIZE environment variables are not set. Ensure you're running the script with torchrun.")
+        return
 
     logging.info(f"Starting PyTorch-based Distributed KMeans clustering with rank {rank} out of {world_size}.")
 
@@ -301,7 +303,8 @@ def main():
         file_paths=args.files,
         hdfs_host=args.hdfs_host,
         hdfs_port=args.hdfs_port,
-        batch_size=args.batch_size,
+        read_block_size=args.read_block_size,
+        data_loader_batch_size=args.data_loader_batch_size,
         n_clusters=args.n_clusters,
         output_file=args.output
     )

@@ -231,6 +231,7 @@ def main():
     args = parser.parse_args()
 
     ray.init(
+        address="auto",
         ignore_reinit_error=True
     )
 
@@ -248,6 +249,8 @@ def main():
     )
 
     logging.info("Clustering process completed.")
+
+    ray.shutdown()
 
 
 if __name__ == "__main__":
