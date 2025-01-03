@@ -157,7 +157,7 @@ def plot_cluster_centers(cluster_centers, output_filename):
         logging.error(f"Error plotting cluster centers: {e}")
 
 
-def process_files(file_paths, hdfs_host, hdfs_port, chunk_size, n_clusters, output_filename):
+def process_files(file_paths, hdfs_host, hdfs_port, block_size, n_clusters, output_filename):
     """
     Processes multiple CSV files from HDFS: reads, preprocesses, clusters, and aggregates results.
     Concatenates all files before clustering.
@@ -191,7 +191,7 @@ def process_files(file_paths, hdfs_host, hdfs_port, chunk_size, n_clusters, outp
 
             logging.info(f"Processing file: {file_path}")
             with hdfs.open_input_file(file_path) as file:
-                read_options = pv.ReadOptions(block_size=chunk_size * 100)
+                read_options = pv.ReadOptions(block_size=block_size)
                 parse_options = pv.ParseOptions(delimiter=',')
                 convert_options = pv.ConvertOptions(strings_can_be_null=True)
 
@@ -203,7 +203,7 @@ def process_files(file_paths, hdfs_host, hdfs_port, chunk_size, n_clusters, outp
                     convert_options=convert_options
                 )
 
-                logging.info(f"Reading CSV in chunks of approximately {chunk_size} rows.")
+                logging.info(f"Reading file {file_path} in chunks of {block_size} bytes.")
 
                 # Process each batch
                 for batch in csv_reader:
@@ -258,7 +258,6 @@ def process_files(file_paths, hdfs_host, hdfs_port, chunk_size, n_clusters, outp
     end_time = time.time()
     final_results["execution_time"] = end_time - start_time
 
-    # Append execution details to the output file with proper JSON serialization
     with open(output_file, 'w') as f:
         json.dump(final_results, f, indent=4, default=lambda o: int(o) if isinstance(o, np.integer)
                                                else float(o) if isinstance(o, np.floating)
@@ -275,7 +274,7 @@ def main():
     parser.add_argument('--files', nargs='+', required=True, help='List of HDFS CSV files to process (e.g., hdfs:///data/nyc_taxi/yellow_tripdata_2015-01.csv)')
     parser.add_argument('--hdfs_host', type=str, default="namenode", help='HDFS Namenode host')
     parser.add_argument('--hdfs_port', type=int, default=9000, help='HDFS Namenode port')
-    parser.add_argument('--chunk_size', type=int, default=5000, help='Number of rows per chunk for processing')
+    parser.add_argument('--block_size', type=int, default=20 * 1024 * 1024, help='Block size for reading CSV files')
     parser.add_argument('--n_clusters', type=int, default=40, help='Number of clusters for KMeans')
     parser.add_argument('--output', type=str, default='ray_results.json', help='Output file to store execution results')
     args = parser.parse_args()
@@ -288,15 +287,13 @@ def main():
         file_paths=args.files,
         hdfs_host=args.hdfs_host,
         hdfs_port=args.hdfs_port,
-        chunk_size=args.chunk_size,
+        block_size=args.block_size,
         n_clusters=args.n_clusters,
         output_filename=args.output
     )
 
     logging.info("Clustering process completed.")
     print(f"Results stored in {args.output}")
-    print("Ray Dashboard is running at http://localhost:8265")
-
 
 if __name__ == "__main__":
     main()
