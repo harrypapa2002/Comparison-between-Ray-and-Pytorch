@@ -267,8 +267,11 @@ def main():
     parser.add_argument('--output', type=str, default='ray_results.json', help='Output file to store execution results')
     args = parser.parse_args()
 
+    # Initialize Ray with dashboard
     ray.init(
-        ignore_reinit_error=True
+        ignore_reinit_error=True,
+        dashboard_host='namenode',
+        dashboard_port=8265
     )
 
     logging.info("Ray initialized")
