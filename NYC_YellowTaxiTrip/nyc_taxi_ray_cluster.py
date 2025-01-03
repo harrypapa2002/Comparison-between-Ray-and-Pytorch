@@ -36,17 +36,34 @@ def preprocess_data(df):
     Preprocesses the DataFrame by converting datetime fields to Unix timestamps,
     calculating trip times and speed, and removing outliers.
     """
-    df = df[['tpep_pickup_datetime', 'tpep_dropoff_datetime', 'pickup_latitude', 'pickup_longitude', 'dropoff_latitude',
-                'dropoff_longitude', 'trip_distance', 'total_amount']]
     try:
-        df['pickup_unix'] = df['tpep_pickup_datetime'].map(convert_to_unix)
-        df['dropoff_unix'] = df['tpep_dropoff_datetime'].map(convert_to_unix)
-        df['trip_times'] = (df['dropoff_unix'] - df['pickup_unix']) / 60  # Trip time in minutes
+        # Select only necessary columns and create an explicit copy
+        df = df[['tpep_pickup_datetime', 'tpep_dropoff_datetime', 'pickup_latitude',
+                 'pickup_longitude', 'dropoff_latitude', 'dropoff_longitude',
+                 'trip_distance', 'total_amount']].copy()
+
+        # Convert datetime columns to Unix timestamps using NumPy
+        pickup_times = pd.to_datetime(df['tpep_pickup_datetime'], errors='coerce').values.astype(np.int64) // 10**9
+        dropoff_times = pd.to_datetime(df['tpep_dropoff_datetime'], errors='coerce').values.astype(np.int64) // 10**9
+
+        # Handle invalid timestamps
+        valid_rows = ~np.isnan(pickup_times) & ~np.isnan(dropoff_times)
+        df = df.loc[valid_rows].copy()  # Create an explicit copy after filtering rows
+        pickup_times = pickup_times[valid_rows]
+        dropoff_times = dropoff_times[valid_rows]
+
+        # Add new columns explicitly
+        df['pickup_unix'] = pickup_times
+        df['dropoff_unix'] = dropoff_times
+        df['trip_times'] = (dropoff_times - pickup_times) / 60  # Trip time in minutes
         df['Speed'] = 60 * (df['trip_distance'] / df['trip_times'])  # Speed in mph
-        df = df[['pickup_latitude', 'pickup_longitude', 'dropoff_latitude', 'dropoff_longitude',
-                 'trip_times', 'trip_distance', 'Speed', 'total_amount']]
+
+        # Remove outliers
         df_cleaned = remove_outliers(df)
+
+        logging.info(f"Preprocessed DataFrame with shape {df_cleaned.shape}")
         return df_cleaned
+
     except Exception as e:
         logging.error(f"Preprocessing error: {e}")
         return pd.DataFrame()
@@ -57,21 +74,25 @@ def remove_outliers(df):
     Removes outliers based on predefined criteria and selects relevant columns.
     """
     try:
+        # Apply outlier filtering and create an explicit copy
         df = df[
-            ((df.dropoff_longitude >= -74.15) & (df.dropoff_longitude <= -73.7004) &
-             (df.dropoff_latitude >= 40.5774) & (df.dropoff_latitude <= 40.9176)) &
-            ((df.pickup_longitude >= -74.15) & (df.pickup_longitude <= -73.7004) &
-             (df.pickup_latitude >= 40.5774) & (df.pickup_latitude <= 40.9176)) &
-            (df.trip_times > 0) & (df.trip_times < 720) &  # Trip times between 0 and 720 minutes
-            (df.trip_distance > 0) & (df.trip_distance < 23) &  # Trip distance between 0 and 23 miles
-            (df.Speed <= 45.31) & (df.Speed >= 0) &  # Speed between 0 and 45.31 mph
-            (df.total_amount < 1000) & (df.total_amount > 0)  # Total amount between $0 and $1000
-        ]
-        return df[['pickup_latitude', 'pickup_longitude']]
+            ((df['dropoff_longitude'] >= -74.15) & (df['dropoff_longitude'] <= -73.7004) &
+             (df['dropoff_latitude'] >= 40.5774) & (df['dropoff_latitude'] <= 40.9176)) &
+            ((df['pickup_longitude'] >= -74.15) & (df['pickup_longitude'] <= -73.7004) &
+             (df['pickup_latitude'] >= 40.5774) & (df['pickup_latitude'] <= 40.9176)) &
+            (df['trip_times'] > 0) & (df['trip_times'] < 720) &  # Trip times between 0 and 720 minutes
+            (df['trip_distance'] > 0) & (df['trip_distance'] < 23) &  # Trip distance between 0 and 23 miles
+            (df['Speed'] >= 0) & (df['Speed'] <= 45.31) &  # Speed between 0 and 45.31 mph
+            (df['total_amount'] > 0) & (df['total_amount'] < 1000)  # Total amount between $0 and $1000
+        ].copy()  # Explicit copy to avoid warnings
+
+        # Select only necessary columns for clustering
+        df = df[['pickup_latitude', 'pickup_longitude']].copy()  # Explicit copy
+        return df
+
     except Exception as e:
         logging.error(f"Outlier removal error: {e}")
         return pd.DataFrame()
-
 
 @ray.remote
 def kmeans_cluster(data_chunk, n_clusters):
