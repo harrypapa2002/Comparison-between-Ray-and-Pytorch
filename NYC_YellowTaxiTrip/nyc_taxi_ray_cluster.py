@@ -16,6 +16,13 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s:%(message)s')
 
 
+def ensure_directories():
+    """
+    Ensures the results and maps directories exist.
+    """
+    os.makedirs("results", exist_ok=True)
+    os.makedirs("maps", exist_ok=True)
+
 def convert_to_unix(s):
     """
     Converts a datetime string to a Unix timestamp.
@@ -132,11 +139,12 @@ def aggregate_clusters(global_cluster_data, global_metrics, n_clusters):
     return final_clusters, cluster_sizes, avg_silhouette
 
 
-def plot_cluster_centers(cluster_centers, output_path):
+def plot_cluster_centers(cluster_centers, output_filename):
     """
     Plots cluster centers on a Folium map and saves it as an HTML file.
     """
     try:
+        output_path = os.path.join("maps", output_filename)
         map_osm = folium.Map(location=[40.734695, -73.990372], zoom_start=12)
         for center in cluster_centers:
             folium.Marker(
@@ -149,11 +157,15 @@ def plot_cluster_centers(cluster_centers, output_path):
         logging.error(f"Error plotting cluster centers: {e}")
 
 
-def process_files(file_paths, hdfs_host, hdfs_port, chunk_size, n_clusters, output_file):
+def process_files(file_paths, hdfs_host, hdfs_port, chunk_size, n_clusters, output_filename):
     """
     Processes multiple CSV files from HDFS: reads, preprocesses, clusters, and aggregates results.
     Concatenates all files before clustering.
     """
+
+    ensure_directories()
+    output_file = os.path.join("results", output_filename)
+
     start_time = time.time()
     final_results = {
         "files_processed": len(file_paths),
@@ -240,7 +252,8 @@ def process_files(file_paths, hdfs_host, hdfs_port, chunk_size, n_clusters, outp
 
     # Plot cluster centers
     cluster_centers = [cluster["center"] for cluster in aggregated_clusters.values()]
-    plot_cluster_centers(cluster_centers, f"cluster_centers_{os.path.basename(output_file)}.html")
+    map_filename = f"cluster_centers_{os.path.basename(output_file).replace('.json', '.html')}"
+    plot_cluster_centers(cluster_centers, map_filename)
 
     end_time = time.time()
     final_results["execution_time"] = end_time - start_time
