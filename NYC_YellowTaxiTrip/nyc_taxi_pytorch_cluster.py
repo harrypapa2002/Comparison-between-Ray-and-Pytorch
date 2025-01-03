@@ -254,12 +254,12 @@ def process_files(rank, world_size, file_paths, hdfs_host, hdfs_port, read_block
     # Perform clustering
     local_results = perform_clustering(dataloader, n_clusters)
 
-    # Gather results to rank 0
-    gathered_cluster_data = None
-    gathered_metrics = None
     if rank == 0:
-        gathered_cluster_data = []
-        gathered_metrics = []
+        gathered_cluster_data = [None for _ in range(world_size)]
+        gathered_metrics = [None for _ in range(world_size)]
+    else:
+        gathered_cluster_data = None
+        gathered_metrics = None
     dist.gather_object(local_results, gathered_cluster_data, dst=0)
 
     # Aggregate and save results on rank 0
