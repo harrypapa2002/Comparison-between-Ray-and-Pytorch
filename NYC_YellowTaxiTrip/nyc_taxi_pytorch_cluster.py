@@ -1,18 +1,23 @@
 import logging
 import os
 import time
+import argparse
+import json
+import numpy as np
+import pandas as pd
+import folium
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
 import torch
 from torch.utils.data import Dataset, DataLoader, DistributedSampler
 import torch.distributed as dist
-import pandas as pd
-import numpy as np
-from sklearn.cluster import KMeans
-from sklearn.metrics import silhouette_score
-import folium
-import argparse
+from pyarrow import fs
+import pyarrow.csv as pv
 
+# Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
 
+# Define the Dataset class for clustering
 class KMeansClusterDataset(Dataset):
     def __init__(self, data):
         self.data = np.asarray(data, dtype=np.float64)
@@ -23,6 +28,12 @@ class KMeansClusterDataset(Dataset):
     def __getitem__(self, idx):
         return self.data[idx]
 
+# Ensure necessary directories exist
+def ensure_directories():
+    os.makedirs("results", exist_ok=True)
+    os.makedirs("maps", exist_ok=True)
+
+# Custom collate function to handle batching
 def custom_collate_fn(batch):
     try:
         numeric_batch = np.array(batch, dtype=np.float64)
@@ -31,16 +42,22 @@ def custom_collate_fn(batch):
         logging.error(f"Collate function error: {e}")
         raise ValueError("Batch data contains non-numeric values.")
 
+# Initialize the distributed process group
 def setup(rank, world_size):
     dist.init_process_group("gloo", rank=rank, world_size=world_size)
     torch.manual_seed(42)
+    logging.info(f"Process {rank} initialized.")
 
+# Clean up the distributed process group
 def cleanup():
     dist.destroy_process_group()
+    logging.info("Distributed process group destroyed.")
 
+# Convert datetime string to Unix timestamp
 def convert_to_unix(s):
     return time.mktime(pd.to_datetime(s, format="%Y-%m-%d %H:%M:%S").timetuple())
 
+# Preprocess the data
 def preprocess_data(data):
     try:
         data["pickup_unix"] = data["tpep_pickup_datetime"].map(convert_to_unix)
@@ -53,22 +70,25 @@ def preprocess_data(data):
         logging.error(f"Preprocessing error: {e}")
         return pd.DataFrame()
 
+# Remove outliers from the data
 def remove_outliers(df):
     try:
-        df_cleaned = df[
-            ((df["dropoff_longitude"] >= -74.15) & (df["dropoff_longitude"] <= -73.7004) &
-             (df["dropoff_latitude"] >= 40.5774) & (df["dropoff_latitude"] <= 40.9176)) &
-            ((df["pickup_longitude"] >= -74.15) & (df["pickup_latitude"] >= 40.5774) &
-             (df["pickup_longitude"] <= -73.7004) & (df["pickup_latitude"] <= 40.9176)) &
-            (df["trip_times"] > 0) & (df["trip_times"] < 720) &
-            (df["trip_distance"] > 0) & (df["trip_distance"] < 23) &
-            (df["Speed"] <= 45.31) & (df["Speed"] >= 0) &
-            (df["total_amount"] > 0) & (df["total_amount"] < 1000)
+        df = df[
+            ((df.dropoff_longitude >= -74.15) & (df.dropoff_longitude <= -73.7004) &
+             (df.dropoff_latitude >= 40.5774) & (df.dropoff_latitude <= 40.9176)) &
+            ((df.pickup_longitude >= -74.15) & (df.pickup_longitude <= -73.7004) &
+             (df.pickup_latitude >= 40.5774) & (df.pickup_latitude <= 40.9176)) &
+            (df.trip_times > 0) & (df.trip_times < 720) &
+            (df.trip_distance > 0) & (df.trip_distance < 23) &
+            (df.Speed <= 45.31) & (df.Speed >= 0) &
+            (df.total_amount < 1000) & (df.total_amount > 0)
         ]
-        return df_cleaned[["pickup_latitude", "pickup_longitude"]]
-    except:
+        return df[["pickup_latitude", "pickup_longitude"]]
+    except Exception as e:
+        logging.error(f"Outlier removal error: {e}")
         return pd.DataFrame()
 
+# Perform KMeans clustering on a data chunk
 def kmeans_cluster(data_chunk, n_clusters):
     if data_chunk is None or len(data_chunk) == 0:
         return {"cluster_data": None, "metrics": None}
@@ -86,10 +106,11 @@ def kmeans_cluster(data_chunk, n_clusters):
                 "center": center.tolist()
             })
         return {"cluster_data": cluster_data, "metrics": {"silhouette": silhouette}}
-    except:
+    except Exception as e:
+        logging.error(f"KMeans clustering error: {e}")
         return {"cluster_data": None, "metrics": None}
 
-def aggregate_results(global_cluster_data, global_metrics, n_clusters):
+def aggregate_clusters(global_cluster_data, global_metrics, n_clusters):
     all_centers = []
     cluster_sizes = [0] * n_clusters
     silhouettes = []
@@ -118,70 +139,175 @@ def aggregate_results(global_cluster_data, global_metrics, n_clusters):
     avg_silhouette = np.mean(silhouettes) if silhouettes else -1
     return final_clusters, cluster_sizes, avg_silhouette
 
-def plot_cluster_centers(cluster_centers, output_path):
+def plot_cluster_centers(cluster_centers, output_filename):
+    map_path = os.path.join("maps", output_filename)
     map_osm = folium.Map(location=[40.734695, -73.990372], zoom_start=12)
     for center in cluster_centers:
         folium.Marker(
             location=center,
             popup=f"Lat: {center[0]:.6f}, Lon: {center[1]:.6f}"
         ).add_to(map_osm)
-    map_osm.save(output_path)
+    map_osm.save(map_path)
+    logging.info(f"Cluster centers plotted to {map_path}")
 
-def process_file(rank, world_size, file_path, chunk_size, n_clusters, output_file):
-    setup(rank, world_size)
-    start_time = time.time()
+# Function to connect to HDFS and retrieve file paths
+def get_hdfs_file_system(hdfs_host, hdfs_port):
     try:
-        data_iter = pd.read_csv(file_path, chunksize=chunk_size)
-        preprocessed_chunks = [
-            preprocess_data(chunk) for idx, chunk in enumerate(data_iter) if idx % world_size == rank
-        ]
-        preprocessed_data = pd.concat(preprocessed_chunks).reset_index(drop=True)
-    except:
-        cleanup()
-        return
-    dataset = KMeansClusterDataset(preprocessed_data.values)
-    sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank)
-    dataloader = DataLoader(dataset, batch_size=chunk_size, sampler=sampler, collate_fn=custom_collate_fn)
+        hdfs = fs.HadoopFileSystem(host=hdfs_host, port=hdfs_port)
+        logging.info(f"Connected to HDFS at {hdfs_host}:{hdfs_port}.")
+        return hdfs
+    except Exception as e:
+        logging.error(f"Failed to connect to HDFS: {e}")
+        return None
+
+# Function to read and preprocess data from HDFS
+def read_and_preprocess_files(hdfs, port, host, file_paths, batch_size, rank, world_size):
+    preprocessed_chunks = []
+    for file_path in file_paths:
+        try:
+            if not file_path.startswith(f"hdfs://{host}:{port}"):
+                file_path = f"hdfs://{host}:{port}/{file_path.lstrip('/')}"
+            logging.info(f"Process {rank}: Processing file: {file_path}")
+            with hdfs.open_input_file(file_path) as file:
+                read_options = pv.ReadOptions(block_size=batch_size)
+                parse_options = pv.ParseOptions(delimiter=',')
+                convert_options = pv.ConvertOptions(strings_can_be_null=True)
+
+                csv_reader = pv.open_csv(
+                    file,
+                    read_options=read_options,
+                    parse_options=parse_options,
+                    convert_options=convert_options
+                )
+
+                for idx, batch in enumerate(csv_reader):
+                    if idx % world_size == rank:
+                        df_batch = preprocess_data(batch.to_pandas())
+                        if not df_batch.empty:
+                            preprocessed_chunks.append(df_batch)
+        except Exception as e:
+            logging.error(f"Process {rank}: Error processing file {file_path}: {e}")
+            continue
+    if preprocessed_chunks:
+        combined_df = pd.concat(preprocessed_chunks, ignore_index=True)
+        logging.info(f"Process {rank}: Combined DataFrame has {len(combined_df)} rows.")
+        return combined_df
+    else:
+        logging.error(f"Process {rank}: No data to process after preprocessing.")
+        return pd.DataFrame()
+
+def perform_clustering(dataloader, n_clusters):
     local_results = []
     for batch in dataloader:
-        result = kmeans_cluster(batch.numpy(), n_clusters)
+        data_batch = batch.numpy()
+        result = kmeans_cluster(data_batch, n_clusters)
         local_results.append(result)
-    all_results = None
+    return local_results
+
+# Function to handle aggregation and result saving (only on rank 0)
+def handle_results(all_cluster_data, all_metrics, n_clusters, output_file, start_time):
+    aggregated_clusters, cluster_sizes, avg_silhouette = aggregate_clusters(all_cluster_data, all_metrics, n_clusters)
+    final_results = {
+        "files_processed": len(all_cluster_data),
+        "execution_time": time.time() - start_time,
+        "clustering_results": [{
+            "clusters": aggregated_clusters,
+            "metrics": {"average_silhouette": avg_silhouette}
+        }]
+    }
+    # Save results to JSON
+    output_filepath = os.path.join("results", output_file)
+    with open(output_filepath, 'w') as f:
+        json.dump(final_results, f, indent=4, default=lambda o: int(o) if isinstance(o, np.integer)
+                                                 else float(o) if isinstance(o, np.floating)
+                                                 else o.tolist() if isinstance(o, np.ndarray)
+                                                 else o)
+    logging.info(f"Results saved to {output_filepath}")
+    # Plot cluster centers
+    cluster_centers = [cluster["center"] for cluster in aggregated_clusters.values()]
+    plot_cluster_centers(cluster_centers, f"cluster_centers_{output_file}.html")
+
+# Main processing function
+def process_files(rank, world_size, file_paths, hdfs_host, hdfs_port, batch_size, n_clusters, output_file):
+    setup(rank, world_size)
+    ensure_directories()
+    start_time = time.time()
+
+    # Connect to HDFS
+    hdfs = get_hdfs_file_system(hdfs_host, hdfs_port)
+    if not hdfs:
+        cleanup()
+        return
+
+    # Read and preprocess data
+    combined_df = read_and_preprocess_files(hdfs, hdfs_host, hdfs_port, file_paths, batch_size, rank, world_size)
+    if combined_df.empty:
+        logging.error(f"Process {rank}: No data after preprocessing. Exiting.")
+        cleanup()
+        return
+
+    # Create Dataset and DataLoader
+    dataset = KMeansClusterDataset(combined_df.values)
+    sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank, shuffle=False)
+    dataloader = DataLoader(dataset, batch_size=batch_size, sampler=sampler, collate_fn=custom_collate_fn)
+
+    # Perform clustering
+    local_results = perform_clustering(dataloader, n_clusters)
+
+    # Gather results to rank 0
+    gathered_cluster_data = None
+    gathered_metrics = None
     if rank == 0:
-        all_results = [None] * world_size
-    dist.gather_object(local_results, all_results, dst=0)
+        gathered_cluster_data = []
+        gathered_metrics = []
+    dist.gather_object(local_results, gathered_cluster_data, dst=0)
+
+    # Aggregate and save results on rank 0
     if rank == 0:
-        global_cluster_data = []
-        global_metrics = []
-        for rank_results in all_results:
-            for result in rank_results:
+        for proc_results in gathered_cluster_data:
+            for result in proc_results:
                 if result["cluster_data"]:
-                    global_cluster_data.append(result["cluster_data"])
+                    for _ in result["cluster_data"]:
+                        gathered_cluster_data.append(result["cluster_data"])
                 if result["metrics"]:
-                    global_metrics.append(result["metrics"])
-        aggregated_clusters, cluster_sizes, avg_silhouette = aggregate_results(global_cluster_data, global_metrics, n_clusters)
-        cluster_centers = [cluster["center"] for cluster in aggregated_clusters.values()]
-        plot_cluster_centers(cluster_centers, f"cluster_centers_{os.path.basename(file_path)}.html")
-        end_time = time.time()
-        exec_time = end_time - start_time
-        with open(output_file, 'a') as f:
-            f.write(f"Nodes: {world_size}, File: {os.path.basename(file_path)}, Time: {exec_time}\n")
-        print(f"Results stored in {output_file}")
+                    gathered_metrics.append(result["metrics"])
+        handle_results(gathered_cluster_data, gathered_metrics, n_clusters, output_file, start_time)
+
     cleanup()
 
+# Entry point
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--files', nargs='+', required=True, help='List of CSV files to process')
-    parser.add_argument('--chunk_size', type=int, default=10000, help='Chunk size for processing')
-    parser.add_argument('--n_clusters', type=int, default=40, help='Number of clusters')
-    parser.add_argument('--nodes', type=int, default=1, help='Number of nodes')
-    parser.add_argument('--output', type=str, default='torch_results.txt', help='Output file for results')
+    parser = argparse.ArgumentParser(description='PyTorch-based Distributed KMeans clustering on HDFS CSV files.')
+    parser.add_argument('--files', nargs='+', required=True, help='List of HDFS CSV files to process (e.g., /data/nyc_taxi/yellow_tripdata_2015-01.csv)')
+    parser.add_argument('--hdfs_host', type=str, default="namenode", help='HDFS Namenode host')
+    parser.add_argument('--hdfs_port', type=int, default=9000, help='HDFS Namenode port')
+    parser.add_argument('--batch_size', type=int, default=1024 * 1024, help='Batch size in bytes')
+    parser.add_argument('--n_clusters', type=int, default=40, help='Number of clusters for KMeans')
+    parser.add_argument('--nodes', type=int, default=1, help='Number of distributed nodes')
+    parser.add_argument('--output', type=str, default='torch_results.json', help='Output file to store execution results')
     args = parser.parse_args()
+
+    # Set environment variables for distributed processing
     os.environ['WORLD_SIZE'] = str(args.nodes)
     rank = int(os.getenv('RANK', 0))
     world_size = int(os.getenv('WORLD_SIZE', 1))
-    for file_path in args.files:
-        process_file(rank, world_size, file_path, args.chunk_size, args.n_clusters, args.output)
+
+    logging.info(f"Starting PyTorch-based Distributed KMeans clustering with rank {rank} out of {world_size}.")
+
+    # Process files
+    process_files(
+        rank=rank,
+        world_size=world_size,
+        file_paths=args.files,
+        hdfs_host=args.hdfs_host,
+        hdfs_port=args.hdfs_port,
+        batch_size=args.batch_size,
+        n_clusters=args.n_clusters,
+        output_file=args.output
+    )
+
+    if rank == 0:
+        logging.info("Clustering process completed.")
 
 if __name__ == "__main__":
     main()
