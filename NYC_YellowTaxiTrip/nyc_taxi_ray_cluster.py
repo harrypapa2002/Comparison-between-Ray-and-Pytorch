@@ -197,7 +197,7 @@ def process_files(file_paths, hdfs_host, hdfs_port, block_size, n_clusters, outp
             with hdfs.open_input_file(file_path) as file:
                 read_options = pv.ReadOptions(block_size=block_size)
                 parse_options = pv.ParseOptions(delimiter=',')
-                convert_options = pv.ConvertOptions(strings_can_be_null=True)
+                convert_options = pv.ConvertOptions(strings_can_be_null=True, column_types={"tolls_amount": "float64"})
 
                 # Create a CSV reader
                 csv_reader = pv.open_csv(
