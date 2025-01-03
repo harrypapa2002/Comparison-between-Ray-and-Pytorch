@@ -275,6 +275,8 @@ def process_files(rank, world_size, file_paths, hdfs_host, hdfs_port, read_block
             if proc_metrics:
                 all_metrics.extend(proc_metrics)
 
+        handle_results(all_cluster_data, all_metrics, n_clusters, output_file, start_time)
+
     cleanup()
 
 # Entry point
