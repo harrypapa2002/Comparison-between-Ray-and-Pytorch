@@ -265,15 +265,8 @@ def process_files(rank, world_size, file_paths, hdfs_host, hdfs_port, read_block
 
     # Aggregate and save results on rank 0
     if rank == 0:
-        all_cluster_data = []
-        all_metrics = []
-        for proc_cluster_data in gathered_cluster_data:
-            if proc_cluster_data:
-                for cluster in proc_cluster_data:
-                    all_cluster_data.append(cluster)
-        for proc_metrics in gathered_metrics:
-            if proc_metrics:
-                all_metrics.extend(proc_metrics)
+        all_cluster_data = [cluster_data for cluster_data in gathered_cluster_data if cluster_data]
+        all_metrics = [metrics for metrics in gathered_metrics if metrics]
 
         handle_results(all_cluster_data, all_metrics, n_clusters, output_file, start_time)
 
