@@ -27,7 +27,8 @@ def custom_collate_fn(batch):
     try:
         numeric_batch = np.array(batch, dtype=np.float64)
         return torch.tensor(numeric_batch, dtype=torch.float64)
-    except:
+    except Exception as e:
+        logging.error(f"Collate function error: {e}")
         raise ValueError("Batch data contains non-numeric values.")
 
 def setup(rank, world_size):
@@ -48,7 +49,8 @@ def preprocess_data(data):
         data["Speed"] = 60 * (data["trip_distance"] / data["trip_times"])
         df_cleaned = remove_outliers(data)
         return df_cleaned
-    except:
+    except Exception as e:
+        logging.error(f"Preprocessing error: {e}")
         return pd.DataFrame()
 
 def remove_outliers(df):
