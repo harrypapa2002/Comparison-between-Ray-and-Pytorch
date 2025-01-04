@@ -272,7 +272,7 @@ def process_files(rank, world_size, file_paths, hdfs_host, hdfs_port, read_block
     # Aggregate and save results on rank 0
     if rank == 0:
         logging.info("Rank 0: Aggregating and saving results.")
-        handle_results(len(file_paths), gathered_metrics, n_clusters, output_file, start_time)
+        handle_results(len(file_paths), gathered_cluster_data, gathered_metrics, n_clusters, output_file, start_time)
 
     cleanup()
 
