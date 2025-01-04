@@ -198,14 +198,6 @@ def read_and_preprocess_files(hdfs, hdfs_host, hdfs_port, file_paths, batch_size
         logging.error(f"Process {rank}: No data to process after preprocessing.")
         return pd.DataFrame()
 
-def perform_clustering(dataloader, n_clusters):
-    local_results = []
-    for batch in dataloader:
-        data_batch = batch.numpy()
-        result = kmeans_cluster(data_batch, n_clusters)
-        local_results.append(result)
-    return local_results
-
 # Function to handle aggregation and result saving (only on rank 0)
 def handle_results(all_cluster_data, all_metrics, n_clusters, output_file, start_time):
     aggregated_clusters, cluster_sizes, avg_silhouette = aggregate_clusters(all_cluster_data, all_metrics, n_clusters)
@@ -254,7 +246,7 @@ def process_files(rank, world_size, file_paths, hdfs_host, hdfs_port, read_block
     dataloader = DataLoader(dataset, batch_size=data_loader_batch_size, sampler=sampler, collate_fn=custom_collate_fn)
 
     # Perform clustering
-    local_results = perform_clustering(dataloader, n_clusters)
+    local_results = [kmeans_cluster(batch.numpy(), n_clusters) for batch in dataloader]
 
     if rank == 0:
         gathered_cluster_data = [None for _ in range(world_size)]
