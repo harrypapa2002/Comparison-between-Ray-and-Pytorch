@@ -114,14 +114,15 @@ def aggregate_clusters(global_cluster_data, global_metrics, n_clusters):
     all_centers = []
     cluster_sizes = [0] * n_clusters
     silhouettes = []
-    for batch_data, metrics in zip(global_cluster_data, global_metrics):
-        if batch_data:
-            for cluster in batch_data:
-                logging.info(f"Cluster: {cluster}")
-                all_centers.append(cluster["center"])
-                cluster_sizes[cluster["label"]] += cluster["size"]
-        if metrics:
-            silhouettes.append(metrics["silhouette"])
+    for rank_data, metrics in zip(global_cluster_data, global_metrics):
+        for batch_data in rank_data:
+            if batch_data:
+                for cluster in batch_data:
+                    logging.info(f"Cluster: {cluster}")
+                    all_centers.append(cluster["center"])
+                    cluster_sizes[cluster["label"]] += cluster["size"]
+            if metrics:
+                silhouettes.append(metrics["silhouette"])
     if not all_centers:
         return {}, cluster_sizes, -1
     all_centers = np.array(all_centers)
@@ -267,8 +268,6 @@ def process_files(rank, world_size, file_paths, hdfs_host, hdfs_port, read_block
     # Aggregate and save results on rank 0
     if rank == 0:
         logging.info("Rank 0: Aggregating and saving results.")
-        logging.info(f"Rank 0: Gathered cluster data: {gathered_cluster_data}")
-        logging.info(f"Rank 0: Gathered metrics: {gathered_metrics}")
         handle_results(gathered_cluster_data, gathered_metrics, n_clusters, output_file, start_time)
 
     cleanup()
