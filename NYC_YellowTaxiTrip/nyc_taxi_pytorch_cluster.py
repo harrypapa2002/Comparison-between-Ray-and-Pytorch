@@ -116,6 +116,7 @@ def aggregate_clusters(global_cluster_data, global_metrics, n_clusters):
     silhouettes = []
     for batch_data, metrics in zip(global_cluster_data, global_metrics):
         if batch_data:
+            logging.info(f"Batch data: {len(batch_data)}")
             for cluster in batch_data:
                 logging.info(f"Cluster: {cluster}")
                 all_centers.append(cluster["center"])
@@ -261,8 +262,8 @@ def process_files(rank, world_size, file_paths, hdfs_host, hdfs_port, read_block
     else:
         gathered_cluster_data = None
         gathered_metrics = None
-    dist.gather_object([result["cluster_data"] for result in local_results], gathered_cluster_data, dst=0)
-    dist.gather_object([result["metrics"] for result in local_results], gathered_metrics, dst=0)
+    dist.all_gather([result["cluster_data"] for result in local_results], gathered_cluster_data, dst=0)
+    dist.all_gather([result["metrics"] for result in local_results], gathered_metrics, dst=0)
 
     # Aggregate and save results on rank 0
     if rank == 0:
