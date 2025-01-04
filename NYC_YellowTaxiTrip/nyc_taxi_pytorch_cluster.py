@@ -114,15 +114,19 @@ def aggregate_clusters(global_cluster_data, global_metrics, n_clusters):
     all_centers = []
     cluster_sizes = [0] * n_clusters
     silhouettes = []
-    for rank_data, metrics in zip(global_cluster_data, global_metrics):
+    for rank_data in global_cluster_data:
         for batch_data in rank_data:
             if batch_data:
                 for cluster in batch_data:
                     logging.info(f"Cluster: {cluster}")
                     all_centers.append(cluster["center"])
                     cluster_sizes[cluster["label"]] += cluster["size"]
-            if metrics:
-                silhouettes.append(metrics["silhouette"])
+
+    for rank_metrics in global_metrics:
+        for metric in rank_metrics:
+            if metric:
+                silhouettes.append(metric["silhouette"])
+
     if not all_centers:
         return {}, cluster_sizes, -1
     all_centers = np.array(all_centers)
