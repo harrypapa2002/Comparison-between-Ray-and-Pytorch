@@ -254,8 +254,8 @@ def process_files(rank, world_size, file_paths, hdfs_host, hdfs_port, read_block
     else:
         gathered_cluster_data = None
         gathered_metrics = None
-    dist.all_gather_object([result["cluster_data"] for result in local_results], gathered_cluster_data, dst=0)
-    dist.all_gather_object([result["metrics"] for result in local_results], gathered_metrics, dst=0)
+    dist.all_gather_object([result["cluster_data"] for result in local_results], gathered_cluster_data)
+    dist.all_gather_object([result["metrics"] for result in local_results], gathered_metrics)
 
     # Aggregate and save results on rank 0
     if rank == 0:
