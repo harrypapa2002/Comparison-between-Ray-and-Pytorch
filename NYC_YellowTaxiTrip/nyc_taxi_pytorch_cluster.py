@@ -211,10 +211,10 @@ def perform_clustering(dataloader, n_clusters):
     return local_results
 
 # Function to handle aggregation and result saving (only on rank 0)
-def handle_results(all_cluster_data, all_metrics, n_clusters, output_file, start_time):
+def handle_results(file_num, all_cluster_data, all_metrics, n_clusters, output_file, start_time):
     aggregated_clusters, cluster_sizes, avg_silhouette = aggregate_clusters(all_cluster_data, all_metrics, n_clusters)
     final_results = {
-        "files_processed": len(all_cluster_data),
+        "files_processed": file_num,
         "execution_time": time.time() - start_time,
         "clustering_results": [{
             "clusters": aggregated_clusters,
@@ -272,7 +272,7 @@ def process_files(rank, world_size, file_paths, hdfs_host, hdfs_port, read_block
     # Aggregate and save results on rank 0
     if rank == 0:
         logging.info("Rank 0: Aggregating and saving results.")
-        handle_results(gathered_cluster_data, gathered_metrics, n_clusters, output_file, start_time)
+        handle_results(len(file_paths), gathered_metrics, n_clusters, output_file, start_time)
 
     cleanup()
 
