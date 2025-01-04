@@ -76,6 +76,27 @@ def save_intermediate_results(results, chunk_id):
     with open(os.path.expanduser(f'{path}/result_chunk_{chunk_id}.json'), 'w') as f:
         json.dump(results, f)
 
+def add_self_loops(edge_index, num_nodes):
+    loop_index = torch.arange(0, num_nodes, dtype=torch.long).unsqueeze(0).repeat(2, 1)
+    edge_index = torch.cat([edge_index, loop_index], dim=1)
+    return edge_index
+
+def prune_disconnected_nodes(edge_index):
+    unique_nodes = torch.unique(edge_index)
+    node_map = {old.item(): new for new, old in enumerate(unique_nodes)}
+    
+    # Filter out edges with unmapped nodes
+    mapped_edges = []
+    for i in range(edge_index.size(1)):
+        src, dst = edge_index[:, i]
+        if src.item() in node_map and dst.item() in node_map:
+            mapped_edges.append([node_map[src.item()], node_map[dst.item()]])
+    
+    if not mapped_edges:
+        raise ValueError("No valid edges remain after pruning disconnected nodes.")
+    
+    mapped_edges = torch.tensor(mapped_edges, dtype=torch.long).t()
+    return mapped_edges, len(unique_nodes)
 
 # Aggregate intermediate results
 def aggregate_results():
@@ -98,18 +119,23 @@ def display_results(start_time, aggregated_results, config):
     normalized_results = normalize_pr(torch.tensor(list(aggregated_results.values())))
     top_nodes = dict(sorted(zip(aggregated_results.keys(), normalized_results.tolist()),
                              key=lambda item: item[1], reverse=True)[:10])
-    memory_usage = psutil.Process(os.getpid()).memory_info().rss / (1024 * 1024)
+    process = psutil.Process(os.getpid())
+    memory_info = process.memory_info()
+    peak_memory = memory_info.rss / (1024 * 1024)  
+    virtual_memory = memory_info.vms / (1024 * 1024)
 
     results_text = (
+        f"File {config['datafile'].split('.')[0]} - number of worker machines {config['world_size']} - batch size {config['batch_size']}:\n"
         f"Execution Time (seconds): {execution_time:.2f}\n"
-        f"Memory Usage (MB): {memory_usage:.2f}\n"
+        f"Peak Memory Usage (MB): {peak_memory:.2f}\n"
+        f"Virtual Memory Usage (MB): {virtual_memory:.2f}\n"
         f"Top 10 Nodes by PageRank (Normalized):\n{json.dumps(top_nodes, indent=4)}\n"
     )
     print(results_text)
 
     directory = os.path.expanduser('~/Comparison-between-Ray-and-Pytorch/PageRank/results')
     os.makedirs(directory, exist_ok=True)
-    file_name = f'{config["datafile"].split(".")[0]}_pagerank_results.txt'
+    file_name = f"{config['datafile'].split('.')[0]}_{config['world_size']}_results.txt"
     with open(f'{directory}/{file_name}', 'w') as f:
         f.write(results_text)
 
@@ -138,8 +164,12 @@ def distributed_pagerank(rank, world_size):
 
             for batch in dataloader:
                 pr_input, nodes = format_input(batch)
+                num_nodes = len(nodes)
+                pr_input = add_self_loops(pr_input, num_nodes)
+                pr_input, num_nodes = prune_disconnected_nodes(pr_input)
                 pr_scores = page_rank(edge_index=pr_input).tolist()
-                global_results.update({node: pr_scores[idx] for idx, node in enumerate(nodes)})
+                global_results.update({int(nodes[idx]): pr_scores[idx] for idx in range(len(pr_scores))})
+
 
             if i % 10 == 0:
                 save_intermediate_results(global_results, i)
