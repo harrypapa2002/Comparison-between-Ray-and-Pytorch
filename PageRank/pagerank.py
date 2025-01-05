@@ -30,14 +30,14 @@ class GraphDataset(Dataset):
 # Distributed setup for VMs
 def setup(rank, world_size):
     os.environ['MASTER_ADDR'] = '192.168.0.1'
-    os.environ['MASTER_PORT'] = '12345'
+    os.environ['MASTER_PORT'] = '29500'
     dist.init_process_group("gloo", rank=rank, world_size=world_size)
 
 
 # Clean up process group and intermediate files
 def cleanup():
     dist.destroy_process_group()
-    temp_dir = '~/Comparison-between-Ray-and-Pytorch/TriangleCount/intermediate_results'
+    temp_dir = '~/Comparison-between-Ray-and-Pytorch/PageRank/intermediate_results'
     temp_dir = os.path.expanduser(temp_dir)
     if os.path.exists(temp_dir):
         for file in os.listdir(temp_dir):
