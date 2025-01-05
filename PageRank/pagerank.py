@@ -70,14 +70,32 @@ def normalize_pr(scores):
 
 
 # Save intermediate results
-def save_intermediate_results(results, chunk_id):
-    path = '~/Comparison-between-Ray-and-Pytorch/PageRank/intermediate_results'
-    os.makedirs(os.path.expanduser(path), exist_ok=True)
-    temp_path = os.path.expanduser(f'{path}/temp_result_chunk_{chunk_id}.json')
-    final_path = os.path.expanduser(f'{path}/result_chunk_{chunk_id}.json')
-    with open(temp_path, 'w') as f:
-        json.dump(results, f)
-    os.rename(temp_path, final_path)  
+def save_intermediate_results(intermediate_result, filename):
+    directory = os.path.expanduser('~/Comparison-between-Ray-and-Pytorch/PageRank/intermediate_results')
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+    file_path = os.path.join(directory, filename)
+
+    with open(file_path, 'w') as f:
+        json.dump(intermediate_result, f)
+
+
+def load_intermediate_results():
+    top_aggregated_result = {}
+    directory = os.path.expanduser('~/Comparison-between-Ray-and-Pytorch/PageRank/intermediate_results')
+
+    for filename in os.listdir(directory):
+        if filename.endswith(".json"):
+            file_path = os.path.join(directory, filename)
+            with open(file_path, 'r') as f:
+                result_dict = json.load(f)
+                top_aggregated_result = aggregate_pr_results(top_aggregated_result, result_dict)
+                del result_dict
+                top_aggregated_result = top_scores(10000, top_aggregated_result)
+                gc.collect()
+
+    return top_aggregated_result
+  
 
 
 def add_self_loops(edge_index, num_nodes):
@@ -102,17 +120,45 @@ def prune_disconnected_nodes(edge_index):
     mapped_edges = torch.tensor(mapped_edges, dtype=torch.long).t()
     return mapped_edges, len(unique_nodes)
 
-# Aggregate intermediate results
-def aggregate_results():
+def save_intermediate_results(intermediate_result, filename):
     directory = os.path.expanduser('~/Comparison-between-Ray-and-Pytorch/PageRank/intermediate_results')
-    aggregated = {}
-    for file in os.listdir(directory):
-        if file.endswith('.json'):
-            with open(os.path.join(directory, file), 'r') as f:
-                chunk_results = json.load(f)
-                for node, score in chunk_results.items():
-                    aggregated[node] = aggregated.get(node, 0) + score
-    return aggregated
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+    file_path = os.path.join(directory, filename)
+
+    with open(file_path, 'w') as f:
+        json.dump(intermediate_result, f)
+
+
+# Aggregate new results into existing results
+def aggregate_pr_results(existing_results, new_results):
+    for node, score in new_results.items():
+        existing_results[node] = existing_results.get(node, 0) + score
+    return existing_results
+
+
+# Keep only the top N scores
+def top_scores(limit, scores):
+    sorted_scores = dict(sorted(scores.items(), key=lambda item: item[1], reverse=True))
+    return dict(list(sorted_scores.items())[:limit])
+
+
+# Load and aggregate intermediate results from JSON files
+def load_intermediate_results():
+    top_aggregated_result = {}
+    directory = os.path.expanduser('~/Comparison-between-Ray-and-Pytorch/PageRank/intermediate_results')
+
+    for filename in os.listdir(directory):
+        if filename.endswith(".json"):
+            file_path = os.path.join(directory, filename)
+            with open(file_path, 'r') as f:
+                result_dict = json.load(f)
+                top_aggregated_result = aggregate_pr_results(top_aggregated_result, result_dict)
+                del result_dict
+                top_aggregated_result = top_scores(10000, top_aggregated_result)
+                gc.collect()
+
+    return top_aggregated_result
 
 
 # Display and save results to file
@@ -184,7 +230,7 @@ def distributed_pagerank(rank, world_size):
         save_intermediate_results(global_results, 'final')
 
     if rank == 0:
-        aggregated_results = aggregate_results()
+        aggregated_results = load_intermediate_results()
         display_results(start_time, aggregated_results, config)
 
     cleanup()
