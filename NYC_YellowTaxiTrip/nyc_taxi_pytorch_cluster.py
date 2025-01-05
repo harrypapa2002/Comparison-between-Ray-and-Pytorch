@@ -14,10 +14,8 @@ import torch.distributed as dist
 from pyarrow import fs
 import pyarrow.csv as pv
 
-# Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
 
-# Define the Dataset class for clustering
 class KMeansClusterDataset(Dataset):
     def __init__(self, data):
         self.data = np.asarray(data, dtype=np.float64)
@@ -28,12 +26,10 @@ class KMeansClusterDataset(Dataset):
     def __getitem__(self, idx):
         return self.data[idx]
 
-# Ensure necessary directories exist
 def ensure_directories():
     os.makedirs("results", exist_ok=True)
     os.makedirs("maps", exist_ok=True)
 
-# Custom collate function to handle batching
 def custom_collate_fn(batch):
     try:
         numeric_batch = np.array(batch, dtype=np.float64)
@@ -42,22 +38,18 @@ def custom_collate_fn(batch):
         logging.error(f"Collate function error: {e}")
         raise ValueError("Batch data contains non-numeric values.")
 
-# Initialize the distributed process group
 def setup(rank, world_size):
     dist.init_process_group("gloo", rank=rank, world_size=world_size)
     torch.manual_seed(42)
     logging.info(f"Process {rank} initialized.")
 
-# Clean up the distributed process group
 def cleanup():
     dist.destroy_process_group()
     logging.info("Distributed process group destroyed.")
 
-# Convert datetime string to Unix timestamp
 def convert_to_unix(s):
     return time.mktime(pd.to_datetime(s, format="%Y-%m-%d %H:%M:%S").timetuple())
 
-# Preprocess the data
 def preprocess_data(data):
     try:
         data["pickup_unix"] = data["tpep_pickup_datetime"].map(convert_to_unix)
@@ -70,7 +62,6 @@ def preprocess_data(data):
         logging.error(f"Preprocessing error: {e}")
         return pd.DataFrame()
 
-# Remove outliers from the data
 def remove_outliers(df):
     try:
         df = df[
@@ -88,7 +79,6 @@ def remove_outliers(df):
         logging.error(f"Outlier removal error: {e}")
         return pd.DataFrame()
 
-# Perform KMeans clustering on a data chunk
 def kmeans_cluster(data_chunk, n_clusters):
     if data_chunk is None or len(data_chunk) == 0:
         return {"cluster_data": None, "metrics": None}
@@ -156,7 +146,6 @@ def plot_cluster_centers(cluster_centers, output_filename):
     map_osm.save(map_path)
     logging.info(f"Cluster centers plotted to {map_path}")
 
-# Function to connect to HDFS and retrieve file paths
 def get_hdfs_file_system(hdfs_host, hdfs_port):
     try:
         hdfs = fs.HadoopFileSystem(host=hdfs_host, port=hdfs_port)
@@ -166,7 +155,6 @@ def get_hdfs_file_system(hdfs_host, hdfs_port):
         logging.error(f"Failed to connect to HDFS: {e}")
         return None
 
-# Function to read and preprocess data from HDFS
 def read_and_preprocess_files(hdfs, hdfs_host, hdfs_port, file_paths, batch_size, rank, world_size):
     preprocessed_chunks = []
     for file_path in file_paths:
@@ -210,7 +198,6 @@ def perform_clustering(dataloader, n_clusters):
         local_results.append(result)
     return local_results
 
-# Function to handle aggregation and result saving (only on rank 0)
 def handle_results(file_num, all_cluster_data, all_metrics, n_clusters, output_file, start_time):
     aggregated_clusters, cluster_sizes, avg_silhouette = aggregate_clusters(all_cluster_data, all_metrics, n_clusters)
     final_results = {
@@ -221,7 +208,6 @@ def handle_results(file_num, all_cluster_data, all_metrics, n_clusters, output_f
             "metrics": {"average_silhouette": avg_silhouette}
         }]
     }
-    # Save results to JSON
     output_filepath = os.path.join("results", output_file)
     with open(output_filepath, 'w') as f:
         json.dump(final_results, f, indent=4, default=lambda o: int(o) if isinstance(o, np.integer)
@@ -233,31 +219,26 @@ def handle_results(file_num, all_cluster_data, all_metrics, n_clusters, output_f
     cluster_centers = [cluster["center"] for cluster in aggregated_clusters.values()]
     plot_cluster_centers(cluster_centers, f"cluster_centers_{output_file}.html")
 
-# Main processing function
 def process_files(rank, world_size, file_paths, hdfs_host, hdfs_port, read_block_size, data_loader_batch_size, n_clusters, output_file):
     setup(rank, world_size)
     ensure_directories()
     start_time = time.time()
 
-    # Connect to HDFS
     hdfs = get_hdfs_file_system(hdfs_host, hdfs_port)
     if not hdfs:
         cleanup()
         return
 
-    # Read and preprocess data
     combined_df = read_and_preprocess_files(hdfs, hdfs_host, hdfs_port, file_paths, read_block_size, rank, world_size)
     if combined_df.empty:
         logging.error(f"Process {rank}: No data after preprocessing. Exiting.")
         cleanup()
         return
 
-    # Create Dataset and DataLoader
     dataset = KMeansClusterDataset(combined_df.values)
     sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank, shuffle=False)
     dataloader = DataLoader(dataset, batch_size=data_loader_batch_size, sampler=sampler, collate_fn=custom_collate_fn)
 
-    # Perform clustering
     local_results = perform_clustering(dataloader, n_clusters)
 
     if rank == 0:
@@ -269,14 +250,12 @@ def process_files(rank, world_size, file_paths, hdfs_host, hdfs_port, read_block
     dist.gather_object([result["cluster_data"] for result in local_results], gathered_cluster_data)
     dist.gather_object([result["metrics"] for result in local_results], gathered_metrics)
 
-    # Aggregate and save results on rank 0
     if rank == 0:
         logging.info("Rank 0: Aggregating and saving results.")
         handle_results(len(file_paths), gathered_cluster_data, gathered_metrics, n_clusters, output_file, start_time)
 
     cleanup()
 
-# Entry point
 def main():
     parser = argparse.ArgumentParser(description='PyTorch-based Distributed KMeans clustering on HDFS CSV files.')
     parser.add_argument('--files', nargs='+', required=True, help='List of HDFS CSV files to process (e.g., /data/nyc_taxi/yellow_tripdata_2015-01.csv)')
@@ -288,7 +267,6 @@ def main():
     parser.add_argument('--output', type=str, default='torch_results.json', help='Output file to store execution results')
     args = parser.parse_args()
 
-    # Obtain rank and world_size from environment variables set by torchrun
     rank = int(os.getenv('RANK', -1))
     world_size = int(os.getenv('WORLD_SIZE', -1))
 
@@ -298,7 +276,6 @@ def main():
 
     logging.info(f"Starting PyTorch-based Distributed KMeans clustering with rank {rank} out of {world_size}.")
 
-    # Process files
     process_files(
         rank=rank,
         world_size=world_size,
