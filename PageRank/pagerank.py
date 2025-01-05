@@ -73,8 +73,12 @@ def normalize_pr(scores):
 def save_intermediate_results(results, chunk_id):
     path = '~/Comparison-between-Ray-and-Pytorch/PageRank/intermediate_results'
     os.makedirs(os.path.expanduser(path), exist_ok=True)
-    with open(os.path.expanduser(f'{path}/result_chunk_{chunk_id}.json'), 'w') as f:
+    temp_path = os.path.expanduser(f'{path}/temp_result_chunk_{chunk_id}.json')
+    final_path = os.path.expanduser(f'{path}/result_chunk_{chunk_id}.json')
+    with open(temp_path, 'w') as f:
         json.dump(results, f)
+    os.rename(temp_path, final_path)  
+
 
 def add_self_loops(edge_index, num_nodes):
     loop_index = torch.arange(0, num_nodes, dtype=torch.long).unsqueeze(0).repeat(2, 1)

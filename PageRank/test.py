@@ -4,9 +4,11 @@ import time
 import gc
 import torch
 from torch_ppr import page_rank
-from torch.utils.data import Dataset, DataLoader
+import torch.distributed as dist
+from torch.utils.data import Dataset, DataLoader, DistributedSampler
+import pyarrow.fs as fs
 import pyarrow.csv as pv
-import pandas as pd
+import psutil
 
 
 class GraphDataset(Dataset):
@@ -14,8 +16,8 @@ class GraphDataset(Dataset):
         self.edges = self.format_edges(chunk)
 
     def format_edges(self, chunk):
-        nodes1 = chunk['node1'].tolist()
-        nodes2 = chunk['node2'].tolist()
+        nodes1 = chunk.column('node1').to_pylist()
+        nodes2 = chunk.column('node2').to_pylist()
         return torch.tensor([nodes1, nodes2], dtype=torch.long)
 
     def __len__(self):
@@ -23,6 +25,23 @@ class GraphDataset(Dataset):
 
     def __getitem__(self, idx):
         return self.edges[:, idx]
+
+
+# Distributed setup for VMs
+def setup(rank, world_size):
+    os.environ['MASTER_ADDR'] = '127.0.0.1'
+    os.environ['MASTER_PORT'] = '29500'
+    dist.init_process_group("gloo", rank=rank, world_size=world_size)
+
+
+# Clean up process group and intermediate files
+def cleanup():
+    dist.destroy_process_group()
+    temp_dir = 'C:/Users/anton/Desktop/Pytorch data/intermediate_results/'
+    temp_dir = os.path.expanduser(temp_dir)
+    if os.path.exists(temp_dir):
+        for file in os.listdir(temp_dir):
+            os.remove(os.path.join(temp_dir, file))
 
 
 # Format input edges and map nodes to indices
@@ -50,14 +69,18 @@ def normalize_pr(scores):
     return scores / total_score
 
 
-# Add self-loops to handle dangling nodes
+# Save intermediate results
+def save_intermediate_results(results, chunk_id):
+    path = 'C:/Users/anton/Desktop/Pytorch data/intermediate_results'
+    os.makedirs(os.path.expanduser(path), exist_ok=True)
+    with open(os.path.expanduser(f'{path}/result_chunk_{chunk_id}.json'), 'w') as f:
+        json.dump(results, f)
+
 def add_self_loops(edge_index, num_nodes):
     loop_index = torch.arange(0, num_nodes, dtype=torch.long).unsqueeze(0).repeat(2, 1)
     edge_index = torch.cat([edge_index, loop_index], dim=1)
     return edge_index
 
-
-# Prune disconnected nodes
 def prune_disconnected_nodes(edge_index):
     unique_nodes = torch.unique(edge_index)
     node_map = {old.item(): new for new, old in enumerate(unique_nodes)}
@@ -75,51 +98,98 @@ def prune_disconnected_nodes(edge_index):
     mapped_edges = torch.tensor(mapped_edges, dtype=torch.long).t()
     return mapped_edges, len(unique_nodes)
 
+# Aggregate intermediate results
+def aggregate_results():
+    directory = os.path.expanduser('C:/Users/anton/Desktop/Pytorch data/intermediate_results')
+    aggregated = {}
+    for file in os.listdir(directory):
+        if file.endswith('.json'):
+            with open(os.path.join(directory, file), 'r') as f:
+                chunk_results = json.load(f)
+                for node, score in chunk_results.items():
+                    aggregated[node] = aggregated.get(node, 0) + score
+    return aggregated
 
 
-# Check for isolated nodes
-def check_isolated_nodes(edge_index, num_nodes):
-    adj = torch.sparse_coo_tensor(edge_index, torch.ones(edge_index.size(1)), (num_nodes, num_nodes))
-    col_sum = torch.sparse.sum(adj, dim=0).to_dense()
-    isolated = (col_sum == 0).sum().item()
-    print(f"Isolated nodes: {isolated} / {num_nodes}")
+# Display and save results to file
+def display_results(start_time, aggregated_results, config):
+    end_time = time.time()
+    execution_time = end_time - start_time
+
+    normalized_results = normalize_pr(torch.tensor(list(aggregated_results.values())))
+    top_nodes = dict(sorted(zip(aggregated_results.keys(), normalized_results.tolist()),
+                             key=lambda item: item[1], reverse=True)[:10])
+    process = psutil.Process(os.getpid())
+    memory_info = process.memory_info()
+    peak_memory = memory_info.rss / (1024 * 1024)  
+    virtual_memory = memory_info.vms / (1024 * 1024)
+
+    results_text = (
+        f"File {config['datafile'].split('.')[0]} - number of worker machines {config['world_size']} - batch size {config['batch_size']}:\n"
+        f"Execution Time (seconds): {execution_time:.2f}\n"
+        f"Peak Memory Usage (MB): {peak_memory:.2f}\n"
+        f"Virtual Memory Usage (MB): {virtual_memory:.2f}\n"
+        f"Top 10 Nodes by PageRank (Normalized):\n{json.dumps(top_nodes, indent=4)}\n"
+    )
+    print(results_text)
+
+    directory = os.path.expanduser('C:/Users/anton/Desktop/Pytorch data/results')
+    os.makedirs(directory, exist_ok=True)
+    file_name = f"{config['datafile'].split('.')[0]}_{config['world_size']}_results.txt"
+    with open(f'{directory}/{file_name}', 'w') as f:
+        f.write(results_text)
 
 
-# PageRank computation locally
-def run_pagerank_local(file_path):
+# Distributed PageRank computation
+def distributed_pagerank(rank, world_size):
+    # Simulate local testing without HDFS
+    config = {
+        "datafile": "twitter7/twitter7_100mb.csv",  # Path to local CSV
+        "batch_size": 1024 * 1024 * 50,
+        "world_size": world_size  # Add world size to the config
+    }
+    
+    setup(rank, world_size)
+
+    # Use local file path instead of HDFS
+    file_to_read = f'C:/Users/anton/Desktop/Pytorch data/{config["datafile"]}'  # Local path to CSV
+
     start_time = time.time()
     global_results = {}
 
-    data = pd.read_csv(file_path)
-    dataset = GraphDataset(data)
-    dataloader = DataLoader(dataset, batch_size=1024 * 1024)
+    # Read CSV locally using PyArrow or pandas
+    reader = pv.read_csv(file_to_read, read_options=pv.ReadOptions(block_size=config['batch_size']))
 
-    for batch in dataloader:
-        pr_input, all_nodes = format_input(batch)
-        num_nodes = len(all_nodes)
-        
-        # Add self-loops and prune disconnected nodes
-        pr_input = add_self_loops(pr_input, num_nodes)
-        pr_input, num_nodes = prune_disconnected_nodes(pr_input)
-        
-        # Check for isolated nodes (optional)
-        check_isolated_nodes(pr_input, num_nodes)
+    for i, chunk in enumerate(reader):
+        dataset = GraphDataset(chunk)
+        sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank, shuffle=False)
+        dataloader = DataLoader(dataset, batch_size=1024 * 1024, sampler=sampler)
 
-        # Perform PageRank
-        pr_scores = page_rank(edge_index=pr_input).tolist()
-        global_results.update({idx: pr_scores[idx] for idx in range(len(pr_scores))})
+        for batch in dataloader:
+            pr_input, nodes = format_input(batch)
+            num_nodes = len(nodes)
+            pr_input = add_self_loops(pr_input, num_nodes)
+            pr_input, num_nodes = prune_disconnected_nodes(pr_input)
+            pr_scores = page_rank(edge_index=pr_input).tolist()
+            global_results.update({int(nodes[idx]): pr_scores[idx] for idx in range(len(pr_scores))})
 
+        if i % 10 == 0:
+            save_intermediate_results(global_results, i)
+            global_results.clear()
+            gc.collect()
 
-    # Normalize and display results
-    normalized_results = normalize_pr(torch.tensor(list(global_results.values())))
-    top_nodes = dict(sorted(zip(global_results.keys(), normalized_results.tolist()),
-                             key=lambda item: item[1], reverse=True)[:10])
+    if global_results:
+        save_intermediate_results(global_results, 'final')
 
-    execution_time = time.time() - start_time
-    print(f"Execution Time (seconds): {execution_time:.2f}")
-    print(f"Top 10 Nodes by PageRank (Normalized):\n{json.dumps(top_nodes, indent=4)}")
+    if rank == 0:
+        aggregated_results = aggregate_results()
+        display_results(start_time, aggregated_results, config)
+
+    cleanup()
+
 
 
 if __name__ == "__main__":
-    file_path = 'C:/Users/anton/Desktop/Pytorch data/twitter7_100mb.csv'  # Replace with actual path
-    run_pagerank_local(file_path)
+    rank = int(os.getenv('RANK',0))
+    world_size = int(os.getenv('WORLD_SIZE',1))
+    distributed_pagerank(rank, world_size)
