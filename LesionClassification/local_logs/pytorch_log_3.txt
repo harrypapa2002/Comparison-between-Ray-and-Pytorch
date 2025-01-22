@@ -1,0 +1,87 @@
+======================================
+      Pipeline Execution Summary
+======================================
+
+Number of Workers: 3
+
+
+=============================================
+          Feature Vector Extraction
+=============================================
+Total Feature Extraction Duration: 456.26 seconds
+
+--- Statistics per Worker ---
+Worker 1 processed 890 images in 456.13 seconds with avg CPU usage 24.15%.
+Worker 2 processed 890 images in 453.68 seconds with avg CPU usage 22.70%.
+Worker 3 processed 890 images in 456.06 seconds with avg CPU usage 23.66%.
+Overall Average CPU Usage: 23.50%
+
+--- Worker Utilizations ---
+Worker 1: 99.97% utilization
+Worker 2: 99.43% utilization
+Worker 3: 99.96% utilization
+
+--- Worker Throughput ---
+Worker 1: 1.95 images/second
+Worker 2: 1.96 images/second
+Worker 3: 1.95 images/second
+Global Throughput: 5.85 images/second
+
+
+============================================
+          10 Fold Cross Validation
+============================================
+Total 10-Fold Duration: 66.46 seconds
+
+--- Statistics per Worker ---
+Worker 1 processed 4 folds in 66.45 seconds with avg CPU usage 29.15%.
+Worker 2 processed 3 folds in 54.15 seconds with avg CPU usage 28.27%.
+Worker 3 processed 3 folds in 54.42 seconds with avg CPU usage 25.00%.
+Overall Average CPU Usage: 27.47%
+
+--- Worker Utilizations ---
+Worker 1: 99.98% utilization
+Worker 2: 81.48% utilization
+Worker 3: 81.89% utilization
+
+--- Worker Throughput ---
+Worker 1: 0.06 folds/second
+Worker 2: 0.06 folds/second
+Worker 3: 0.06 folds/second
+Global Throughput: 0.15 folds/second
+
+--- Duration per Fold ---
+Mean Time Per Fold:   17.3675 seconds
+
+Fold 1 Duration:   17.5434 seconds
+Fold 2 Duration:   17.9492 seconds
+Fold 3 Duration:   18.1551 seconds
+Fold 4 Duration:   12.2689 seconds
+Fold 5 Duration:   17.9145 seconds
+Fold 6 Duration:   17.7518 seconds
+Fold 7 Duration:   18.0394 seconds
+Fold 8 Duration:   17.7619 seconds
+Fold 9 Duration:   18.0297 seconds
+Fold 10 Duration:   18.2612 seconds
+
+--- Mean Loss Per Epoch Across All Folds ---
+Epoch [1/10], Mean Loss: 0.6639
+Epoch [2/10], Mean Loss: 0.6056
+Epoch [3/10], Mean Loss: 0.5793
+Epoch [4/10], Mean Loss: 0.5639
+Epoch [5/10], Mean Loss: 0.5467
+Epoch [6/10], Mean Loss: 0.5239
+Epoch [7/10], Mean Loss: 0.5074
+Epoch [8/10], Mean Loss: 0.4932
+Epoch [9/10], Mean Loss: 0.4725
+Epoch [10/10], Mean Loss: 0.4667
+
+--- Mean Metrics Across All Folds ---
+Mean Accuracy:  0.6910
+Mean Precision: 0.7048
+Mean Recall:    0.7014
+Mean F1 Score:  0.6960
+Mean AUC-ROC:   0.7692
+
+
+Total Pipeline Duration: 526.99 seconds

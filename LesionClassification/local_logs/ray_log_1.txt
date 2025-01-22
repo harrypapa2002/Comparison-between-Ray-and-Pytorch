@@ -1,0 +1,75 @@
+======================================
+      Pipeline Execution Summary
+======================================
+
+Number of Workers: 1
+
+
+=============================================
+          Feature Vector Extraction
+=============================================
+Total Feature Extraction Duration: 1306.25 seconds
+
+--- Statistics per Worker ---
+Worker 1 processed 2670 images in 1300.14 seconds with avg CPU usage 3.29%.
+Overall Average CPU Usage: 3.29%
+
+--- Worker Utilizations ---
+Worker 1: 99.53% utilization
+
+--- Worker Throughput ---
+Worker 1: 2.05 images/second
+Global Throughput: 2.04 images/second
+
+
+============================================
+          10 Fold Cross Validation
+============================================
+Total 10-Fold Duration: 137.34 seconds
+
+--- Statistics per Worker ---
+Worker 1 processed 10 folds in 136.14 seconds with avg CPU usage 4.00%.
+Overall Average CPU Usage: 4.00%
+
+--- Worker Utilizations ---
+Worker 1: 99.13% utilization
+
+--- Worker Throughput ---
+Worker 1: 0.07 folds/second
+Global Throughput: 0.07 folds/second
+
+--- Duration per Fold ---
+Mean Time Per Fold:   13.4925 seconds
+
+Fold 1 Duration:   13.6000 seconds
+Fold 2 Duration:   16.3413 seconds
+Fold 3 Duration:   14.3797 seconds
+Fold 4 Duration:   13.0326 seconds
+Fold 5 Duration:   13.2918 seconds
+Fold 6 Duration:   13.0274 seconds
+Fold 7 Duration:   12.7096 seconds
+Fold 8 Duration:   13.0872 seconds
+Fold 9 Duration:   12.8053 seconds
+Fold 10 Duration:   12.6496 seconds
+
+--- Mean Loss Per Epoch Across All Folds ---
+Epoch [1/10], Mean Loss: 0.6653
+Epoch [2/10], Mean Loss: 0.6123
+Epoch [3/10], Mean Loss: 0.5865
+Epoch [4/10], Mean Loss: 0.5599
+Epoch [5/10], Mean Loss: 0.5456
+Epoch [6/10], Mean Loss: 0.5232
+Epoch [7/10], Mean Loss: 0.5127
+Epoch [8/10], Mean Loss: 0.4928
+Epoch [9/10], Mean Loss: 0.4773
+Epoch [10/10], Mean Loss: 0.4704
+
+--- Mean Metrics Across All Folds ---
+Mean Accuracy:  0.6993
+Mean Precision: 0.6959
+Mean Recall:    0.7500
+Mean F1 Score:  0.7170
+Mean AUC-ROC:   0.7628
+
+
+Total Pipeline Duration: 1454.43 seconds
