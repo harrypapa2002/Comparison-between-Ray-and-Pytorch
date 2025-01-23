@@ -1,0 +1,14 @@
+{
+    "Framework": "pytorch",
+    "Dataset": 1,
+    "Nodes": 3,
+    "Total Time": 164.39,
+    "Feature Extraction Time": 137.25,
+    "Cross Validation Time": 24.71,
+    "Mean Time per Fold": 6.1657,
+    "Mean Accuracy": 0.674,
+    "Mean Precision": 0.6823,
+    "Mean Recall": 0.76,
+    "Mean F1 Score": 0.7174,
+    "Mean AUC-ROC": 0.7386
+}

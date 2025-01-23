@@ -4,6 +4,9 @@ import pandas as pd
 import time
 import json
 from PIL import Image
+import io
+import pyarrow.parquet as pq
+from pyarrow.fs import HadoopFileSystem
 import ray
 import torch
 import torch.nn as nn
@@ -59,9 +62,58 @@ class ClassifierNN(nn.Module):
     def forward(self, x):
         return self.net(x)
 
+def get_num_nodes():
+    try:
+        nodes = ray.nodes()
+        active_nodes = sum(1 for node in nodes if node["Alive"])
+        print(f"Active Ray nodes: {active_nodes}")
+        return active_nodes
+    except Exception as e:
+        print(f"Error getting active nodes: {e}")
+        return 0  # Return 0 if an error occurs
+
+def load_tabular_data_from_hdfs(hdfs_host, hdfs_port, file_path):
+    try:
+        hdfs = HadoopFileSystem(host=hdfs_host, port=hdfs_port)
+        print(f"Connected to HDFS at {hdfs_host}:{hdfs_port}.")
+
+        with hdfs.open_input_file(file_path) as file:
+            table = pq.read_table(file)
+
+        df = table.to_pandas()
+        print(f"Successfully loaded {len(df)} rows from {file_path}.")
+        return df
+
+    except Exception as e:
+        print(f"Failed to load data from HDFS: {e}")
+        return None 
+
+def load_image_from_hdfs(hdfs_host, hdfs_port, images_folder, image_id):
+
+    try:
+        # Establish HDFS connection
+        hdfs = HadoopFileSystem(host=hdfs_host, port=hdfs_port)
+        print(f"Connected to HDFS at {hdfs_host}:{hdfs_port}.")
+
+        # Construct the full image path in HDFS
+        image_path = f"{images_folder}/{image_id}"
+
+        # Read the image file as binary
+        with hdfs.open_input_file(image_path) as file:
+            image_data = file.read()
+
+        # Convert binary data to PIL image
+        img = Image.open(io.BytesIO(image_data)).convert("RGB")
+        print(f"Successfully loaded image: {image_id} from {image_path}")
+        return img
+
+    except Exception as e:
+        print(f"Failed to load image {image_id} from HDFS: {e}")
+        return None  # Return None if there's an error
+
 
 @ray.remote
-def feature_vector_extraction(image_id, images_folder, feature_extractor):
+def feature_vector_extraction(config, image_id, feature_extractor):
     """Extract feature vector from a single image."""
 
     # Image preprocessing function
@@ -72,9 +124,10 @@ def feature_vector_extraction(image_id, images_folder, feature_extractor):
     ])
 
     try:
-        # Preprocess the image
-        image_path = os.path.join(images_folder, image_id)
-        img = Image.open(image_path).convert("RGB")  # Ensure RGB format
+        # Load and preprocess the image
+        img = load_tabular_data_from_hdfs(
+            config["hdfs_host"], config["hdfs_port"], config["image_data"], image_id
+        )
         img_tensor = preprocess(img)  # Apply preprocessing
         preprocessed_img = img_tensor.unsqueeze(0)
 
@@ -85,7 +138,7 @@ def feature_vector_extraction(image_id, images_folder, feature_extractor):
         return feature_vector, image_id  # Return only the feature vector
 
     except Exception as e:
-        print(f"Error processing image {image_path}: {e}")
+        print(f"Error processing image {image_id}: {e}")
         return None, None  # Return None if an error occurs
 
 
@@ -205,41 +258,39 @@ def distributed_pipeline(config):
         Data Preprocessing 
     ===========================
     """
-    
+
     print("Loading and preprocessing tabular data...")
-    tabular_data = pd.read_excel(config['tabular_data'])
+    
+    tabular_data = load_tabular_data_from_hdfs(
+        config["hdfs_host"], config["hdfs_port"], config["tabular_data"]
+    )
+    
     preprocessed_data = tabular_data_preprocessing(tabular_data)
 
     print("Feature extraction from images...")
     feature_extraction_start_time = time.time()
     
-    if config.get("load_precomputed_features", True):
-        print("Loading precomputed feature vectors and image IDs...")
-        feature_vectors = np.load("feature_vectors_mb.npy")
-        image_ids = np.load("image_ids_mb.npy", allow_pickle=True)
-    else:
-        
-        # Load the ResNet50 model pre-trained on ImageNet
-        base_model = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V1)
-        base_model.eval()  # Set to evaluation mode
+    # Load the ResNet50 model pre-trained on ImageNet
+    base_model = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V1)
+    base_model.eval()  # Set to evaluation mode
 
-        # Remove the fully connected layer (extract feature vectors only)
-        feature_extractor = torch.nn.Sequential(*list(base_model.children())[:-1])
+    # Remove the fully connected layer (extract feature vectors only)
+    feature_extractor = torch.nn.Sequential(*list(base_model.children())[:-1])
 
-        # Use Ray to process each image independently
-        futures = [
-            feature_vector_extraction.remote(image_id, config["image_data"], feature_extractor) 
-            for image_id in preprocessed_data['midas_file_name']
-        ]
+    # Use Ray to process each image independently
+    futures = [
+        feature_vector_extraction.remote(config, image_id, feature_extractor) 
+        for image_id in preprocessed_data['midas_file_name']
+    ]
         
-        fve_results = ray.get(futures)
+    fve_results = ray.get(futures)
         
-        feature_vectors, image_ids = [], []
-        for fv, ids in fve_results:
-            feature_vectors.append(fv)
-            image_ids.append(ids)
-        feature_vectors = np.vstack(feature_vectors)
-        image_ids = np.hstack(image_ids)
+    feature_vectors, image_ids = [], []
+    for fv, ids in fve_results:
+        feature_vectors.append(fv)
+        image_ids.append(ids)
+    feature_vectors = np.vstack(feature_vectors)
+    image_ids = np.hstack(image_ids)
 
     feature_extraction_end_time = time.time()
     feature_extraction_duration = round(feature_extraction_end_time - feature_extraction_start_time, 2)
@@ -334,18 +385,34 @@ def distributed_pipeline(config):
 
 def main():
     
-    tabular_data_path = "data/release_midas.xlsx"
-    test_data_path = "data/release_midas_test.xlsx"
-    data_1_path = "data/data_1.xlsx"
-    data_2_path = "data/data_2.xlsx"
-    data_3_path = "data/data_3.xlsx"
-    images_folder = "C:/Users/nikol/Desktop/university/9th_semester/physiological_systems_simulation/project/dataset/midasmultimodalimagedatasetforaibasedskincancer"
+    tabular_data_path = "/data/mra_midas/release_midas.xlsx"
+    test_data_path = "/data/mra_midas/release_midas_test.xlsx"
+    data_1_path = "/data/mra_midas/data_1.xlsx"
+    data_2_path = "/data/mra_midas/data_2.xlsx"
+    data_3_path = "/data/mra_midas/data_3.xlsx"
+    images_folder = "/data/mra_midas/images"
+    
+    pipeline_start_time = time.time()
+    ray.init(address="auto")
+    # os.environ["RAY_DEDUP_LOGS"] = "0"
+    
+    config = {
+        "hdfs_host": "192.168.0.1",
+        "hdfs_port": 9000,
+        "num_nodes": get_num_nodes(),
+        "epochs": 10,
+        "tabular_data": data_1_path,
+        "image_data": images_folder,
+        "log_text": log_text,
+        "results": results,
+        "load_precomputed_features": False
+    }
     
     # --- Initialize results dictionary ---
     results = {
         "Framework": "ray",
         "Dataset": None,
-        "Nodes": None,
+        "Nodes": get_num_nodes(),
         "Total Time": None,
         "Feature Extraction Time": None,
         "Cross Validation Time": None,
@@ -358,17 +425,6 @@ def main():
     }
     
     log_text = []
-
-    config = {
-        "world_size": 3,
-        "epochs": 10,
-        "tabular_data": data_1_path,
-        "image_data": images_folder,
-        "log_text": log_text,
-        "results": results,
-        "load_precomputed_features": False
-    }
-    results["Nodes"] = config["world_size"]
     
     # Define data file paths and sizes (in GB)
     datasets = {
@@ -398,10 +454,6 @@ def main():
     log_text.append(f"\nNumber of Workers: {config['world_size']}")
     log_text.append(dataset_info)  # Add dataset name and size (if available)
     
-    pipeline_start_time = time.time()
-    ray.init()
-    # os.environ["RAY_DEDUP_LOGS"] = "0"
-    
     distributed_pipeline(config)
 
     pipeline_end_time = time.time()
@@ -410,7 +462,7 @@ def main():
     
     log_text.append(f"\nTotal Pipeline Duration: {pipeline_duration} seconds")
     
-    log_dir = "local_logs"
+    log_dir = "logs"
     os.makedirs(log_dir, exist_ok=True)
     log_file = os.path.join(log_dir, log_filename)
     with open(log_file, "w") as file:
@@ -418,7 +470,7 @@ def main():
     print(f"Log saved to {log_file}")
     
     if dataset_number is not None:
-        results_dir = "local_results"
+        results_dir = "results"
         os.makedirs(results_dir, exist_ok=True)
         results_file = os.path.join(results_dir, results_filename)
         with open(results_file, "w") as file:
