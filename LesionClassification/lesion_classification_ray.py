@@ -396,6 +396,8 @@ def main():
     ray.init(address="auto")
     # os.environ["RAY_DEDUP_LOGS"] = "0"
     
+    log_text = []
+    
     config = {
         "hdfs_host": "192.168.0.1",
         "hdfs_port": 9000,
@@ -423,8 +425,6 @@ def main():
         "Mean F1 Score": None,
         "Mean AUC-ROC": None
     }
-    
-    log_text = []
     
     # Define data file paths and sizes (in GB)
     datasets = {
