@@ -398,18 +398,6 @@ def main():
     
     log_text = []
     
-    config = {
-        "hdfs_host": "192.168.0.1",
-        "hdfs_port": 9000,
-        "num_nodes": get_num_nodes(),
-        "epochs": 10,
-        "tabular_data": data_1_path,
-        "image_data": images_folder,
-        "log_text": log_text,
-        "results": results,
-        "load_precomputed_features": False
-    }
-    
     # --- Initialize results dictionary ---
     results = {
         "Framework": "ray",
@@ -424,6 +412,18 @@ def main():
         "Mean Recall": None,
         "Mean F1 Score": None,
         "Mean AUC-ROC": None
+    }
+    
+    config = {
+        "hdfs_host": "192.168.0.1",
+        "hdfs_port": 9000,
+        "num_nodes": get_num_nodes(),
+        "epochs": 10,
+        "tabular_data": data_1_path,
+        "image_data": images_folder,
+        "log_text": log_text,
+        "results": results,
+        "load_precomputed_features": False
     }
     
     # Define data file paths and sizes (in GB)
