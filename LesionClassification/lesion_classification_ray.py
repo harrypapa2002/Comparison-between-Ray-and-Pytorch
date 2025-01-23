@@ -439,8 +439,8 @@ def main():
         dataset_number = int(tabular_file.split("_")[1].split(".")[0])  # Extract dataset number (1, 2, 3)
         dataset_size = datasets[tabular_file]
         dataset_info = f"Dataset Used: {tabular_file} ({dataset_size:.2f} GB)"
-        log_filename = f"ray_data{dataset_number}_node{config['world_size']}.txt"
-        results_filename = f"ray_data{dataset_number}_node{config['world_size']}.json"
+        log_filename = f"ray_data{dataset_number}_node{config['num_nodes']}.txt"
+        results_filename = f"ray_data{dataset_number}_node{config['num_nodes']}.json"
         results["Dataset"] = dataset_number
     else:
         dataset_info = f"Dataset Used: {tabular_file}"
@@ -451,7 +451,7 @@ def main():
     log_text.append(f"======================================")    
     log_text.append(f"      Pipeline Execution Summary")
     log_text.append(f"======================================")
-    log_text.append(f"\nNumber of Workers: {config['world_size']}")
+    log_text.append(f"\nNumber of Nodes: {config['num_nodes']}")
     log_text.append(dataset_info)  # Add dataset name and size (if available)
     
     distributed_pipeline(config)
