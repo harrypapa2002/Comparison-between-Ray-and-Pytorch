@@ -75,19 +75,19 @@ def get_num_nodes():
         return 0  # Return 0 if an error occurs
 
 
-def load_tabular_data_from_hdfs(hdfs_host, hdfs_port, file_path):
-    try:
-        hdfs = HadoopFileSystem(host=hdfs_host, port=hdfs_port)
-        print(f"Connected to HDFS at {hdfs_host}:{hdfs_port}.")
+# def load_tabular_data_from_hdfs(hdfs_host, hdfs_port, file_path):
+#     try:
+#         hdfs = HadoopFileSystem(host=hdfs_host, port=hdfs_port)
+#         print(f"Connected to HDFS at {hdfs_host}:{hdfs_port}.")
 
-        with hdfs.open_input_file(file_path) as file:
-            df = pd.read_excel(file)
-            print(f"Successfully loaded {len(df)} rows from {file_path}.")
-            return df
+#         with hdfs.open_input_file(file_path) as file:
+#             df = pd.read_excel(file)
+#             print(f"Successfully loaded {len(df)} rows from {file_path}.")
+#             return df
 
-    except Exception as e:
-        print(f"Failed to load data from HDFS: {e}")
-        return None 
+#     except Exception as e:
+#         print(f"Failed to load data from HDFS: {e}")
+#         return None 
     
 
 def load_image_from_hdfs(hdfs, images_folder, image_id):
@@ -268,22 +268,22 @@ def distributed_pipeline(config):
     except Exception as e:
         print(f"Failed to connect to HDFS: {e}")
     
+    
+    print("Loading and preprocessing tabular data...")
+    
     try:
         with hdfs.open_input_file(config["tabular_data"]) as file:
             tabular_data = pd.read_excel(file)
-            print(f"Successfully loaded {len(tabular_data)} rows from {config["tabular_data"]}.")
+            print(f"Successfully loaded {len(tabular_data)} rows from {config['tabular_data']}.")
 
     except Exception as e:
         print(f"Failed to load data from HDFS: {e}")
         return None 
     
     
-
-    print("Loading and preprocessing tabular data...")
-    
-    tabular_data = load_tabular_data_from_hdfs(
-       hdfs, config["tabular_data"]
-    )
+    # tabular_data = load_tabular_data_from_hdfs(
+    #    hdfs, config["tabular_data"]
+    # )
     
     preprocessed_data = tabular_data_preprocessing(tabular_data)
 
