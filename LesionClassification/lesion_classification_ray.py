@@ -90,13 +90,9 @@ def load_tabular_data_from_hdfs(hdfs_host, hdfs_port, file_path):
         return None 
     
 
-def load_image_from_hdfs(hdfs_host, hdfs_port, images_folder, image_id):
+def load_image_from_hdfs(hdfs, images_folder, image_id):
 
     try:
-        # Establish HDFS connection
-        hdfs = HadoopFileSystem(host=hdfs_host, port=hdfs_port)
-        print(f"Connected to HDFS at {hdfs_host}:{hdfs_port}.")
-
         # Construct the full image path in HDFS
         image_path = f"{images_folder}/{image_id}"
 
@@ -106,7 +102,7 @@ def load_image_from_hdfs(hdfs_host, hdfs_port, images_folder, image_id):
 
         # Convert binary data to PIL image
         img = Image.open(io.BytesIO(image_data)).convert("RGB")
-        print(f"Successfully loaded image: {image_id} from {image_path}")
+        # print(f"Successfully loaded image: {image_id} from {image_path}")
         return img
 
     except Exception as e:
@@ -115,7 +111,7 @@ def load_image_from_hdfs(hdfs_host, hdfs_port, images_folder, image_id):
 
 
 @ray.remote
-def feature_vector_extraction(config, image_id, feature_extractor):
+def feature_vector_extraction(config, image_id, feature_extractor, hdfs):
     """Extract feature vector from a single image."""
 
     # Image preprocessing function
@@ -128,7 +124,7 @@ def feature_vector_extraction(config, image_id, feature_extractor):
     try:
         # Load and preprocess the image
         img = load_image_from_hdfs(
-            config["hdfs_host"], config["hdfs_port"], config["image_data"], image_id
+            hdfs, config["image_data"], image_id
         )
         img_tensor = preprocess(img)  # Apply preprocessing
         preprocessed_img = img_tensor.unsqueeze(0)
@@ -136,6 +132,10 @@ def feature_vector_extraction(config, image_id, feature_extractor):
         # Extract feature vector
         with torch.no_grad():
             feature_vector = feature_extractor(preprocessed_img).squeeze().numpy()
+            
+        # # Explicitly free memory
+        # del img, img_tensor, image_data
+        # gc.collect()  # Force garbage collection
         
         return feature_vector, image_id  # Return only the feature vector
 
@@ -260,11 +260,29 @@ def distributed_pipeline(config):
         Data Preprocessing 
     ===========================
     """
+    
+    try:
+        hdfs = HadoopFileSystem(host=config["hdfs_host"], port=config["hdfs_port"])
+        print(f"Connected to HDFS at {config['hdfs_host']}:{config['hdfs_port']}.")
+        
+    except Exception as e:
+        print(f"Failed to connect to HDFS: {e}")
+    
+    try:
+        with hdfs.open_input_file(config["tabular_data"]) as file:
+            tabular_data = pd.read_excel(file)
+            print(f"Successfully loaded {len(tabular_data)} rows from {config["tabular_data"]}.")
+
+    except Exception as e:
+        print(f"Failed to load data from HDFS: {e}")
+        return None 
+    
+    
 
     print("Loading and preprocessing tabular data...")
     
     tabular_data = load_tabular_data_from_hdfs(
-        config["hdfs_host"], config["hdfs_port"], config["tabular_data"]
+       hdfs, config["tabular_data"]
     )
     
     preprocessed_data = tabular_data_preprocessing(tabular_data)
@@ -281,7 +299,7 @@ def distributed_pipeline(config):
 
     # Use Ray to process each image independently
     futures = [
-        feature_vector_extraction.remote(config, image_id, feature_extractor) 
+        feature_vector_extraction.remote(config, image_id, feature_extractor, hdfs) 
         for image_id in preprocessed_data['midas_file_name']
     ]
         
