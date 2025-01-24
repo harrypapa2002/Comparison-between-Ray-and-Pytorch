@@ -451,7 +451,7 @@ def main():
         "hdfs_port": 9000,
         "num_nodes": get_num_nodes(),
         "epochs": 10,
-        "tabular_data": test_data_path,
+        "tabular_data": data_3_path,
         "image_data": images_folder,
         "log_text": log_text,
         "results": results,
