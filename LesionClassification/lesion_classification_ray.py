@@ -124,7 +124,7 @@ def feature_vector_extraction(config, image_id, feature_extractor, hdfs):
     
     try:
         # Construct the full image path in HDFS
-        image_path = f"{config["image_data"]}/{image_id}"
+        image_path = f"{config['image_data']}/{image_id}"
 
         # Read the image file as binary
         with hdfs.open_input_file(image_path) as file:
