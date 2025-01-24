@@ -127,7 +127,7 @@ def feature_vector_extraction(config, image_id, feature_extractor):
 
     try:
         # Load and preprocess the image
-        img = load_tabular_data_from_hdfs(
+        img = load_image_from_hdfs(
             config["hdfs_host"], config["hdfs_port"], config["image_data"], image_id
         )
         img_tensor = preprocess(img)  # Apply preprocessing
