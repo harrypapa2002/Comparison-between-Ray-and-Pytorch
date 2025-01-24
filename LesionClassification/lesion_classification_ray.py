@@ -145,9 +145,9 @@ def feature_vector_extraction(config, image_id, feature_extractor, hdfs):
         with torch.no_grad():
             feature_vector = feature_extractor(preprocessed_img).squeeze().numpy()
             
-        # Explicitly free memory
-        del img, img_tensor
-        gc.collect()  # Force garbage collection
+        # # Explicitly free memory
+        # del img, img_tensor
+        # gc.collect()  # Force garbage collection
         
         return feature_vector, image_id  # Return only the feature vector
 
