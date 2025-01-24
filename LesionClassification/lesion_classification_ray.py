@@ -145,9 +145,9 @@ def feature_vector_extraction(config, image_id, feature_extractor, hdfs):
         with torch.no_grad():
             feature_vector = feature_extractor(preprocessed_img).squeeze().numpy()
             
-        # # Explicitly free memory
-        # del img, img_tensor
-        # gc.collect()  # Force garbage collection
+        # Explicitly free memory
+        del img, img_tensor
+        gc.collect()  # Force garbage collection
         
         return feature_vector, image_id  # Return only the feature vector
 
@@ -466,6 +466,7 @@ def main():
     }
     
     # --- Identify dataset number and size ---
+    dataset_number = None
     tabular_file = os.path.basename(config["tabular_data"])  # Extract filename
     if tabular_file in datasets:
         dataset_number = int(tabular_file.split("_")[1].split(".")[0])  # Extract dataset number (1, 2, 3)
@@ -477,7 +478,7 @@ def main():
     else:
         dataset_info = f"Dataset Used: {tabular_file}"
         log_filename = f"unknown_data_ray_log.txt"
-        results["Dataset"] = "unknown"
+        # results["Dataset"] = "unknown"
             
     
     log_text.append(f"======================================")    
