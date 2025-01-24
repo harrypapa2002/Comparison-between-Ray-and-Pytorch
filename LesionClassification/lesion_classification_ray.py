@@ -5,6 +5,7 @@ import time
 import json
 from PIL import Image
 import io
+import gc
 import pyarrow.parquet as pq
 import pyarrow.fs as fs
 from pyarrow.fs import HadoopFileSystem
@@ -120,12 +121,23 @@ def feature_vector_extraction(config, image_id, feature_extractor, hdfs):
         transforms.ToTensor(),  # Convert to tensor
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),  # Normalize for ResNet50
     ])
-
+    
     try:
+        # Construct the full image path in HDFS
+        image_path = f"{config["image_data"]}/{image_id}"
+
+        # Read the image file as binary
+        with hdfs.open_input_file(image_path) as file:
+            image_data = file.read()
+
+        # Convert binary data to PIL image
+        img = Image.open(io.BytesIO(image_data)).convert("RGB")
+        
         # Load and preprocess the image
-        img = load_image_from_hdfs(
-            hdfs, config["image_data"], image_id
-        )
+        # img = load_image_from_hdfs(
+        #     hdfs, config["image_data"], image_id
+        # )
+        
         img_tensor = preprocess(img)  # Apply preprocessing
         preprocessed_img = img_tensor.unsqueeze(0)
 
@@ -134,7 +146,7 @@ def feature_vector_extraction(config, image_id, feature_extractor, hdfs):
             feature_vector = feature_extractor(preprocessed_img).squeeze().numpy()
             
         # # Explicitly free memory
-        # del img, img_tensor, image_data
+        # del img, img_tensor
         # gc.collect()  # Force garbage collection
         
         return feature_vector, image_id  # Return only the feature vector
@@ -439,7 +451,7 @@ def main():
         "hdfs_port": 9000,
         "num_nodes": get_num_nodes(),
         "epochs": 10,
-        "tabular_data": data_1_path,
+        "tabular_data": test_data_path,
         "image_data": images_folder,
         "log_text": log_text,
         "results": results,
