@@ -36,12 +36,14 @@ def setup(rank, world_size):
 
 # Clean up process group and intermediate files
 def cleanup():
+    rank = dist.get_rank()
     dist.destroy_process_group()
-    temp_dir = '~/Comparison-between-Ray-and-Pytorch/PageRank/intermediate_results'
-    temp_dir = os.path.expanduser(temp_dir)
-    if os.path.exists(temp_dir):
-        for file in os.listdir(temp_dir):
-            os.remove(os.path.join(temp_dir, file))
+    if rank == 0:
+        temp_dir = '~/Comparison-between-Ray-and-Pytorch/PageRank/intermediate_results'
+        temp_dir = os.path.expanduser(temp_dir)
+        if os.path.exists(temp_dir):
+            for file in os.listdir(temp_dir):
+                os.remove(os.path.join(temp_dir, file))
 
 
 # Format input edges and map nodes to indices
@@ -64,39 +66,33 @@ def format_input(chunk):
 
 
 # Normalize final PageRank scores
-def normalize_pr(scores):
+def normalize_page_rank(scores):
     total_score = scores.sum()
     return scores / total_score
 
 
 # Save intermediate results
-def save_intermediate_results(intermediate_result, filename):
-    directory = os.path.expanduser('~/Comparison-between-Ray-and-Pytorch/PageRank/intermediate_results')
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-    file_path = os.path.join(directory, filename)
+def save_intermediate_results(results, chunk_id,rank):
+    path = '~/Comparison-between-Ray-and-Pytorch/PageRank/intermediate_results'
+    full_path = os.path.expanduser(path)
+    os.makedirs(full_path, exist_ok=True)
 
-    with open(file_path, 'w') as f:
-        json.dump(intermediate_result, f)
+    temp_file = os.path.join(full_path, f'temp_result_chunk_{chunk_id}_rank_{rank}.json')
+    final_file = os.path.join(full_path, f'result_chunk_{chunk_id}_rank_{rank}.json')
 
+    try:
+        # Write to a temporary file first
+        with open(temp_file, 'w') as f:
+            json.dump(results, f)
 
-def load_intermediate_results():
-    top_aggregated_result = {}
-    directory = os.path.expanduser('~/Comparison-between-Ray-and-Pytorch/PageRank/intermediate_results')
+        # Rename the temp file to final to ensure atomic write
+        os.replace(temp_file, final_file)
 
-    for filename in os.listdir(directory):
-        if filename.endswith(".json"):
-            file_path = os.path.join(directory, filename)
-            with open(file_path, 'r') as f:
-                result_dict = json.load(f)
-                top_aggregated_result = aggregate_pr_results(top_aggregated_result, result_dict)
-                del result_dict
-                top_aggregated_result = top_scores(10000, top_aggregated_result)
-                gc.collect()
-
-    return top_aggregated_result
-  
-
+        print(f"Intermediate results for chunk {chunk_id} saved successfully.")
+    except Exception as e:
+        print(f"Error saving intermediate results for chunk {chunk_id}: {e}")
+        if os.path.exists(temp_file):
+            os.remove(temp_file)  # Clean up temp file if error occurs
 
 def add_self_loops(edge_index, num_nodes):
     loop_index = torch.arange(0, num_nodes, dtype=torch.long).unsqueeze(0).repeat(2, 1)
@@ -120,45 +116,18 @@ def prune_disconnected_nodes(edge_index):
     mapped_edges = torch.tensor(mapped_edges, dtype=torch.long).t()
     return mapped_edges, len(unique_nodes)
 
-def save_intermediate_results(intermediate_result, filename):
+# Aggregate intermediate results
+def aggregate_results():
     directory = os.path.expanduser('~/Comparison-between-Ray-and-Pytorch/PageRank/intermediate_results')
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-    file_path = os.path.join(directory, filename)
-
-    with open(file_path, 'w') as f:
-        json.dump(intermediate_result, f)
-
-
-# Aggregate new results into existing results
-def aggregate_pr_results(existing_results, new_results):
-    for node, score in new_results.items():
-        existing_results[node] = existing_results.get(node, 0) + score
-    return existing_results
-
-
-# Keep only the top N scores
-def top_scores(limit, scores):
-    sorted_scores = dict(sorted(scores.items(), key=lambda item: item[1], reverse=True))
-    return dict(list(sorted_scores.items())[:limit])
-
-
-# Load and aggregate intermediate results from JSON files
-def load_intermediate_results():
-    top_aggregated_result = {}
-    directory = os.path.expanduser('~/Comparison-between-Ray-and-Pytorch/PageRank/intermediate_results')
-
-    for filename in os.listdir(directory):
-        if filename.endswith(".json"):
-            file_path = os.path.join(directory, filename)
-            with open(file_path, 'r') as f:
-                result_dict = json.load(f)
-                top_aggregated_result = aggregate_pr_results(top_aggregated_result, result_dict)
-                del result_dict
-                top_aggregated_result = top_scores(10000, top_aggregated_result)
-                gc.collect()
-
-    return top_aggregated_result
+    aggregated = {}
+    for file in os.listdir(directory):
+        if file.startswith('result_chunk_') and file.endswith('.json'):
+            full_path = os.path.join(directory,file)
+            with open(full_path, 'r') as f:
+                chunk_results = json.load(f)
+                for node, score in chunk_results.items():
+                    aggregated[node] = aggregated.get(node, 0) + score
+    return aggregated
 
 
 # Display and save results to file
@@ -166,7 +135,7 @@ def display_results(start_time, aggregated_results, config):
     end_time = time.time()
     execution_time = end_time - start_time
 
-    normalized_results = normalize_pr(torch.tensor(list(aggregated_results.values())))
+    normalized_results = normalize_page_rank(torch.tensor(list(aggregated_results.values())))
     top_nodes = dict(sorted(zip(aggregated_results.keys(), normalized_results.tolist()),
                              key=lambda item: item[1], reverse=True)[:10])
     process = psutil.Process(os.getpid())
@@ -193,10 +162,11 @@ def display_results(start_time, aggregated_results, config):
 # Distributed PageRank computation
 def distributed_pagerank(rank, world_size):
     config = {
-        "datafile": "twitter7/twitter7_100mb.csv",
-        "batch_size": 1024 * 1024 * 50,
+        "datafile": "twitter7/twitter7_5gb.csv",
+        "batch_size": 1024 * 1024 * 30,
         "hdfs_host": '192.168.0.1',
-        "hdfs_port": 9000
+        "hdfs_port": 9000,
+        "world_size": world_size
     }
     setup(rank, world_size)
     hdfs = fs.HadoopFileSystem(host=config['hdfs_host'], port=config['hdfs_port'])
@@ -218,19 +188,23 @@ def distributed_pagerank(rank, world_size):
                 pr_input = add_self_loops(pr_input, num_nodes)
                 pr_input, num_nodes = prune_disconnected_nodes(pr_input)
                 pr_scores = page_rank(edge_index=pr_input).tolist()
-                global_results.update({int(nodes[idx]): pr_scores[idx] for idx in range(len(pr_scores))})
-
+                #global_results.update({int(nodes[idx]): pr_scores[idx] for idx in range(len(pr_scores))})
+                for idx, score in enumerate(pr_scores):
+                    node_id = int(nodes[idx])
+                    global_results[node_id] = global_results.get(node_id,0.0) + score
 
             if i % 10 == 0:
-                save_intermediate_results(global_results, i)
+                save_intermediate_results(global_results, i,rank)
                 global_results.clear()
                 gc.collect()
 
     if global_results:
-        save_intermediate_results(global_results, 'final')
+        save_intermediate_results(global_results, 'final',rank)
+    
+    #dist.barrier()
 
     if rank == 0:
-        aggregated_results = load_intermediate_results()
+        aggregated_results = aggregate_results()
         display_results(start_time, aggregated_results, config)
 
     cleanup()

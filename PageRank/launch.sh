@@ -13,17 +13,17 @@
 # Master Node Details
 MASTER_ADDR="namenode"
 MASTER_PORT=29500  # Keep this consistent with your PageRank code
-NNODES=3  # Number of worker nodes
+NNODES=1 # Number of worker nodes
 NPROC_PER_NODE=4  # Number of processes per node (adjust to your CPU cores)
 WORLD_SIZE=$((NNODES * NPROC_PER_NODE))  # Total number of processes
 
 # HDFS Configuration
 HDFS_HOST="namenode"
 HDFS_PORT=9000
-DATA_FILE="/data/twitter7/twitter7_100mb.csv"  # Path to your HDFS data
+DATA_FILE="/data/twitter7/twitter7_5gb.csv"  # Path to your HDFS data
 
 # PageRank Parameters
-BATCH_SIZE=$((1024 * 1024 * 50))  # 50 MB
+BATCH_SIZE=$((1024 * 1024 * 30))  # 50 MB
 OUTPUT_FILE="pytorch_pagerank_node3_results.json"
 
 # PyTorch PageRank Script Path
