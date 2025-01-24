@@ -81,8 +81,9 @@ def load_tabular_data_from_hdfs(hdfs_host, hdfs_port, file_path):
         print(f"Connected to HDFS at {hdfs_host}:{hdfs_port}.")
 
         with hdfs.open_input_file(file_path) as file:
+            df = pd.read_excel(file)
             print(f"Successfully loaded {len(df)} rows from {file_path}.")
-            return pd.read_excel(file)
+            return df
 
     except Exception as e:
         print(f"Failed to load data from HDFS: {e}")
