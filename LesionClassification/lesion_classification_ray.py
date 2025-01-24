@@ -6,6 +6,7 @@ import json
 from PIL import Image
 import io
 import pyarrow.parquet as pq
+import pyarrow.fs as fs
 from pyarrow.fs import HadoopFileSystem
 import ray
 import torch
@@ -62,6 +63,7 @@ class ClassifierNN(nn.Module):
     def forward(self, x):
         return self.net(x)
 
+
 def get_num_nodes():
     try:
         nodes = ray.nodes()
@@ -72,21 +74,20 @@ def get_num_nodes():
         print(f"Error getting active nodes: {e}")
         return 0  # Return 0 if an error occurs
 
+
 def load_tabular_data_from_hdfs(hdfs_host, hdfs_port, file_path):
     try:
         hdfs = HadoopFileSystem(host=hdfs_host, port=hdfs_port)
         print(f"Connected to HDFS at {hdfs_host}:{hdfs_port}.")
 
         with hdfs.open_input_file(file_path) as file:
-            table = pq.read_table(file)
-
-        df = table.to_pandas()
-        print(f"Successfully loaded {len(df)} rows from {file_path}.")
-        return df
+            print(f"Successfully loaded {len(df)} rows from {file_path}.")
+            return pd.read_excel(file)
 
     except Exception as e:
         print(f"Failed to load data from HDFS: {e}")
         return None 
+    
 
 def load_image_from_hdfs(hdfs_host, hdfs_port, images_folder, image_id):
 
