@@ -106,8 +106,8 @@ def feature_vector_extraction(config, image_id, feature_extractor, hdfs):
             feature_vector = feature_extractor(preprocessed_img).squeeze().numpy().astype(np.float16)
             
         # # Explicitly free memory
-        del img, img_tensor, feature_vector
-        gc.collect()  # Force garbage collection
+        # del img, img_tensor, feature_vector
+        # gc.collect()  # Force garbage collection
         
         return feature_vector, image_id  # Return only the feature vector
 
@@ -275,7 +275,7 @@ def distributed_pipeline(config):
     #     for image_id in preprocessed_data['midas_file_name']
     # ]
         
-    fve_results = ray.get(futures)
+    # fve_results = ray.get(futures)
     
     fve_results = []
     for image_id in preprocessed_data['midas_file_name']:
