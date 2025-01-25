@@ -111,7 +111,7 @@ def load_image_from_hdfs(hdfs, images_folder, image_id):
         return None  # Return None if there's an error
 
 
-@ray.remote
+@ray.remote(resources={"node:worker": 1})
 def feature_vector_extraction(config, image_id, feature_extractor, hdfs):
     """Extract feature vector from a single image."""
 
@@ -143,7 +143,7 @@ def feature_vector_extraction(config, image_id, feature_extractor, hdfs):
 
         # Extract feature vector
         with torch.no_grad():
-            feature_vector = feature_extractor(preprocessed_img).squeeze().numpy()
+            feature_vector = feature_extractor(preprocessed_img).squeeze().numpy().astype(np.float16)
             
         # # Explicitly free memory
         # del img, img_tensor
@@ -451,7 +451,7 @@ def main():
         "hdfs_port": 9000,
         "num_nodes": get_num_nodes(),
         "epochs": 10,
-        "tabular_data": data_3_path,
+        "tabular_data": data_1_path,
         "image_data": images_folder,
         "log_text": log_text,
         "results": results,
