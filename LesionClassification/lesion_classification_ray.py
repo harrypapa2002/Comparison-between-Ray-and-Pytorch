@@ -278,10 +278,15 @@ def distributed_pipeline(config):
     # fve_results = ray.get(futures)
     
     fve_results = []
-    for image_id in preprocessed_data['midas_file_name']:
-        future = feature_vector_extraction.remote(config, image_id, feature_extractor, hdfs)
-        feature_vector = ray.get(future) 
-        fve_results.append(feature_vector) 
+
+    for i in range(0, len(preprocessed_data['midas_file_name']), config["batch_size"]):
+        batch_futures = [
+            feature_vector_extraction.remote(config, image_id, feature_extractor, hdfs)
+            for image_id in preprocessed_data['midas_file_name'][i:i+config["batch_size"]]
+        ]
+        
+        batch_results = ray.get(batch_futures)  # Retrieve 20 at a time
+        fve_results.extend(batch_results)
         
     feature_vectors, image_ids = [], []
     for fv, ids in fve_results:
@@ -421,7 +426,8 @@ def main():
         "image_data": images_folder,
         "log_text": log_text,
         "results": results,
-        "load_precomputed_features": False
+        "load_precomputed_features": False,
+        "batch_size": 20
     }
     
     # Define data file paths and sizes (in GB)
