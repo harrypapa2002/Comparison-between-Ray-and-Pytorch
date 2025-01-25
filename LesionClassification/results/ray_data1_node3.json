@@ -2,13 +2,13 @@
     "Framework": "ray",
     "Dataset": 1,
     "Nodes": 3,
-    "Total Time": 600.86,
-    "Feature Extraction Time": 576.86,
-    "Cross Validation Time": 14.29,
-    "Mean Time per Fold": 4.4032,
-    "Mean Accuracy": 0.6693,
-    "Mean Precision": 0.7206,
-    "Mean Recall": 0.7132,
-    "Mean F1 Score": 0.7054,
-    "Mean AUC-ROC": 0.7447
+    "Total Time": 354.49,
+    "Feature Extraction Time": 344.52,
+    "Cross Validation Time": 6.26,
+    "Mean Time per Fold": 3.2178,
+    "Mean Accuracy": 0.6902,
+    "Mean Precision": 0.7194,
+    "Mean Recall": 0.761,
+    "Mean F1 Score": 0.7351,
+    "Mean AUC-ROC": 0.7512
 }

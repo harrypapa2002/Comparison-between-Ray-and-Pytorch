@@ -427,7 +427,7 @@ def main():
         "log_text": log_text,
         "results": results,
         "load_precomputed_features": False,
-        "batch_size": 20
+        "batch_size": 100
     }
     
     # Define data file paths and sizes (in GB)
