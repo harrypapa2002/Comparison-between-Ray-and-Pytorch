@@ -269,59 +269,38 @@ def distributed_pipeline(config):
 
     # Remove the fully connected layer (extract feature vectors only)
     feature_extractor = torch.nn.Sequential(*list(base_model.children())[:-1])
-
-    # Split images across workers dynamically (one image task per worker)
-    # images_per_worker = np.array_split(preprocessed_data["midas_file_name"], world_size)
-    # assigned_images = images_per_worker[rank]  # Assign images to the worker based on rank
-
-    # feature_vectors, image_ids = [], []
-        
-    # for image_id in assigned_images:
-    #     image_path = os.path.join(config["image_data"], image_id)
-    #     feature_vector = feature_vector_extraction(image_path, feature_extractor)
-
-    #     if feature_vector is not None:
-    #         feature_vectors.append(feature_vector)
-    #         image_ids.append(image_id)
-     
-    # Process images in batches
     
-    # ✅ Step 1: Split images into batches
-    BATCH_SIZE = config["batch_size"]
-    SAVE_INTERVAL = config["save_interval"]
-    
+    # Step 1: Split images into batches    
     all_images = list(preprocessed_data["midas_file_name"])  # Convert to list for slicing
-    batches = [all_images[i:i + BATCH_SIZE] for i in range(0, len(all_images), BATCH_SIZE)]
+    batches = [all_images[i:i + config["batch_size"]] for i in range(0, len(all_images), config["batch_size"])]
 
-    # ✅ Step 2: Manually assign batches to workers (instead of np.array_split)
+    # Step 2: Manually assign batches to workers (instead of np.array_split)
     assigned_batches = [batches[i] for i in range(rank, len(batches), world_size)]
 
     feature_vectors, image_ids = [], []
     local_results = []  # Temporary storage for intermediate results
 
-    # ✅ Step 3: Process batches
+    # Step 3: Process batches
     for batch in assigned_batches:
         batch_results = batch_feature_extraction(config, batch, feature_extractor, hdfs)
 
-        # ✅ Store intermediate results in memory
+        # Store intermediate results in memory
         local_results.extend(batch_results)
 
-        # ✅ Step 4: Save intermediate results to prevent memory buildup
-        if len(local_results) >= SAVE_INTERVAL // BATCH_SIZE:
+        # Step 4: Save intermediate results to prevent memory buildup
+        if len(local_results) >= config["save_interval"] // config["batch_size"]:
             fv_temp, id_temp = zip(*local_results)  # Unzip tuples
             feature_vectors.extend(fv_temp)
             image_ids.extend(id_temp)
             local_results = []  # ✅ Reset batch futures
 
-    # ✅ Step 5: Save any remaining results
+    # Step 5: Save any remaining results
     if local_results:
         fv_temp, id_temp = zip(*local_results)
         feature_vectors.extend(fv_temp)
         image_ids.extend(id_temp)
 
-    # ✅ Step 6: Gather results across ranks
-                           
-    # Gather results across ranks
+    # Step 6: Gather results across ranks
     if rank == 0:
         gathered_fv = [None for _ in range(world_size)]
         gathered_ids = [None for _ in range(world_size)]
@@ -332,7 +311,10 @@ def distributed_pipeline(config):
     dist.gather_object(feature_vectors, gathered_fv)
     dist.gather_object(image_ids, gathered_ids)
 
+    print(f"[Rank {rank}] Reached the barrier before feature aggregation")
     dist.barrier()  # Synchronize all ranks before continuing
+    print(f"[Rank {rank}] Passed the barrier after feature aggregation")
+
 
     # Rank 0 aggregates the results
     if rank == 0:
@@ -354,7 +336,10 @@ def distributed_pipeline(config):
     else:
         to_broadcast = [None, None]
 
+    if rank == 0:
+        print(f"[Rank {rank}] Broadcasting feature vectors...")
     dist.broadcast_object_list(to_broadcast, src=0)
+    print(f"[Rank {rank}] Broadcast completed.")
 
     final_data = to_broadcast[0]
     cnn_feature_columns = to_broadcast[1]
