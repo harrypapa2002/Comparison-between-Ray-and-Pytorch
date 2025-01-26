@@ -5,9 +5,6 @@ import time
 import json
 from PIL import Image
 import io
-import gc
-import pyarrow.parquet as pq
-import pyarrow.fs as fs
 from pyarrow.fs import HadoopFileSystem
 import ray
 import torch
@@ -75,11 +72,8 @@ def get_num_nodes():
         print(f"Error getting active nodes: {e}")
         return 0  # Return 0 if an error occurs
 
-
-# @ray.remote(num_cpus=4)
-
-# @ray.remote
-def feature_vector_extraction(config, image_id, feature_extractor, hdfs):
+@ray.remote
+def feature_vector_extraction(config, batch, feature_extractor, hdfs):
     """Extract feature vector from a single image."""
 
     # Image preprocessing function
@@ -89,45 +83,34 @@ def feature_vector_extraction(config, image_id, feature_extractor, hdfs):
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),  # Normalize for ResNet50
     ])
     
-    try:
-        # Construct the full image path in HDFS
-        image_path = f"{config['image_data']}/{image_id}"
-
-        # Read the image file as binary
-        with hdfs.open_input_file(image_path) as file:
-            image_data = file.read()
-
-        # Convert binary data to PIL image
-        img = Image.open(io.BytesIO(image_data)).convert("RGB")
-        
-        img_tensor = preprocess(img)  # Apply preprocessing
-        preprocessed_img = img_tensor.unsqueeze(0)
-
-        # Extract feature vector
-        with torch.no_grad():
-            feature_vector = feature_extractor(preprocessed_img).squeeze().numpy().astype(np.float16)
-            
-        # # Explicitly free memory
-        # del img, img_tensor, feature_vector
-        # gc.collect()  # Force garbage collection
-        
-        return feature_vector, image_id  # Return only the feature vector
-
-    except Exception as e:
-        print(f"Error processing image {image_id}: {e}")
-        return None, None  # Return None if an error occurs
-
-
-@ray.remote
-def batch_feature_extraction(config, image_ids, feature_extractor, hdfs):
-    """Extract features for a batch of images at once."""
     batch_results = []
-    for image_id in image_ids:
-        result = feature_vector_extraction(config, image_id, feature_extractor, hdfs)
-        batch_results.append(result)
+    
+    for image_id in batch:
+        try:
+            # Construct the full image path in HDFS
+            image_path = f"{config['image_data']}/{image_id}"
 
-    return batch_results  # ✅ Return feature vectors for the whole batch
+            # Read the image file as binary
+            with hdfs.open_input_file(image_path) as file:
+                image_data = file.read()
 
+            # Convert binary data to PIL image
+            img = Image.open(io.BytesIO(image_data)).convert("RGB")
+            
+            img_tensor = preprocess(img)  
+            preprocessed_img = img_tensor.unsqueeze(0)
+
+            # Extract feature vector
+            with torch.no_grad():
+                feature_vector = feature_extractor(preprocessed_img).squeeze().numpy().astype(np.float16)
+            
+            batch_results.append(image_id, feature_vector)
+
+        except Exception as e:
+            print(f"Error processing image {image_id}: {e}")
+            continue
+            
+    return batch_results
 
 
 def train_and_test(config):
@@ -263,11 +246,7 @@ def distributed_pipeline(config):
     except Exception as e:
         print(f"Failed to load data from HDFS: {e}")
         return None 
-    
-    
-    # tabular_data = load_tabular_data_from_hdfs(
-    #    hdfs, config["tabular_data"]
-    # )
+
     
     preprocessed_data = tabular_data_preprocessing(tabular_data)
 
@@ -280,45 +259,25 @@ def distributed_pipeline(config):
 
     # Remove the fully connected layer (extract feature vectors only)
     feature_extractor = torch.nn.Sequential(*list(base_model.children())[:-1])
-
-    # # Use Ray to process each image independently
-    # futures = [
-    #     feature_vector_extraction.remote(config, image_id, feature_extractor, hdfs) 
-    #     for image_id in preprocessed_data['midas_file_name']
-    # ]
-        
-    # fve_results = ray.get(futures)
     
-    # fve_results = []
-
-    # for i in range(0, len(preprocessed_data['midas_file_name']), config["batch_size"]):
-    #     batch_futures = [
-    #         feature_vector_extraction.remote(config, image_id, feature_extractor, hdfs)
-    #         for image_id in preprocessed_data['midas_file_name'][i:i+config["batch_size"]]
-    #     ]
-        
-    #     batch_results = ray.get(batch_futures)  # Retrieve 20 at a time
-    #     fve_results.extend(batch_results)
-    
-    fve_results = []
-    futures = []
+    fve_results, futures = [], []
 
     for i in range(0, len(preprocessed_data['midas_file_name']), config["batch_size"]):
         batch = preprocessed_data['midas_file_name'][i:i+config["batch_size"]]
 
-        # ✅ Submit batch of 10 images as a single task
-        future = batch_feature_extraction.remote(config, batch, feature_extractor, hdfs)
-        futures.append(future)
+        # Submit batch of images as a single task
+        batch_futures = feature_vector_extraction.remote(config, batch, feature_extractor, hdfs)
+        futures.append(batch_futures)
 
-        # ✅ Retrieve and save results every 100 images
+        # Retrieve and save results after some images to relief memory
         if len(futures) >= config["save_interval"] // config["batch_size"]:
-            batch_results = ray.get(futures)  # ✅ Get results for 100 images
+            batch_results = ray.get(futures) 
             for batch in batch_results:
-                fve_results.extend(batch)  # ✅ Append to results array
+                fve_results.extend(batch) 
 
-            futures = []  # ✅ Reset batch futures to avoid memory buildup
+            futures = []  # Reset batch futures to avoid memory buildup
 
-    # ✅ Retrieve remaining results after all tasks are submitted
+    # Retrieve remaining results after all tasks are submitted
     if futures:
         batch_results = ray.get(futures)
         for batch in batch_results:
