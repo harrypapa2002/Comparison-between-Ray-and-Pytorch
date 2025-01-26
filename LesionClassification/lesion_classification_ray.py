@@ -104,7 +104,7 @@ def feature_vector_extraction(config, batch, feature_extractor, hdfs):
             with torch.no_grad():
                 feature_vector = feature_extractor(preprocessed_img).squeeze().numpy().astype(np.float16)
             
-            batch_results.append(image_id, feature_vector)
+            batch_results.append((image_id, feature_vector))
 
         except Exception as e:
             print(f"Error processing image {image_id}: {e}")
