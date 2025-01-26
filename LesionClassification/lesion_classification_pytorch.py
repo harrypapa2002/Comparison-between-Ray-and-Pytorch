@@ -271,10 +271,10 @@ def distributed_pipeline(config):
     feature_extractor = torch.nn.Sequential(*list(base_model.children())[:-1])
 
     # Split images across workers dynamically (one image task per worker)
-    images_per_worker = np.array_split(preprocessed_data["midas_file_name"], world_size)
-    assigned_images = images_per_worker[rank]  # Assign images to the worker based on rank
+    # images_per_worker = np.array_split(preprocessed_data["midas_file_name"], world_size)
+    # assigned_images = images_per_worker[rank]  # Assign images to the worker based on rank
 
-    feature_vectors, image_ids = [], []
+    # feature_vectors, image_ids = [], []
         
     # for image_id in assigned_images:
     #     image_path = os.path.join(config["image_data"], image_id)
@@ -285,10 +285,19 @@ def distributed_pipeline(config):
     #         image_ids.append(image_id)
      
     # Process images in batches
-    for i in range(0, len(assigned_images), config["batch_size"]):
-        batch = assigned_images[i:i + config["batch_size"]]  # Get a batch of images
-        
-        # Call batch_feature_extraction instead of single image extraction
+    
+    # First, split all images into batches
+    all_images = list(preprocessed_data["midas_file_name"])  # Convert to list for slicing
+    batches = [all_images[i:i + config["batch_size"]] for i in range(0, len(all_images), config["batch_size"])]  # Split into batches
+
+    # Now distribute batches across workers (instead of individual images)
+    batches_per_worker = np.array_split(batches, world_size)
+    assigned_batches = batches_per_worker[rank]  # Each worker gets full batches
+
+    feature_vectors, image_ids = [], []
+
+    # Process batches
+    for batch in assigned_batches:
         batch_features = batch_feature_extraction(config, batch, feature_extractor, hdfs)
 
         # Store results
@@ -296,6 +305,7 @@ def distributed_pipeline(config):
             if feature_vector is not None:
                 feature_vectors.append(feature_vector)
                 image_ids.append(img_id)
+
                            
     # Gather results across ranks
     if rank == 0:
@@ -500,8 +510,9 @@ def main():
     
     if rank == 0:
         
-        results["Nodes"] = config["world_size"]/config["num_procs"]
-        print(f"Number of nodes: {config['world_size']/config['num_procs']}")
+        results["Nodes"] = int(config["world_size"]/config["num_procs"])
+        print(f"Number of nodes: {int(config['world_size']/config['num_procs'])}")
+        print(f"World size: {world_size}")
         
         # --- Identify dataset number and size ---
         dataset_number = None
