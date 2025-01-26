@@ -484,7 +484,7 @@ def main():
         "world_size": world_size,
         "num_procs": 4,
         "epochs": 10,
-        "tabular_data": data_1_path,
+        "tabular_data": test_data_path,
         "image_data": images_folder,
         "log_text": log_text,
         "results": results,
@@ -501,6 +501,7 @@ def main():
     if rank == 0:
         
         results["Nodes"] = config["world_size"]/config["num_procs"]
+        print(f"Number of nodes: {config['world_size']/config['num_procs']}")
         
         # --- Identify dataset number and size ---
         dataset_number = None
