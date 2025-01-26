@@ -286,25 +286,39 @@ def distributed_pipeline(config):
      
     # Process images in batches
     
-    # First, split all images into batches
+    # ✅ Step 1: Split images into batches
+    BATCH_SIZE = config["batch_size"]
+    SAVE_INTERVAL = config["save_interval"]
+    
     all_images = list(preprocessed_data["midas_file_name"])  # Convert to list for slicing
-    batches = [all_images[i:i + config["batch_size"]] for i in range(0, len(all_images), config["batch_size"])]  # Split into batches
+    batches = [all_images[i:i + BATCH_SIZE] for i in range(0, len(all_images), BATCH_SIZE)]
 
-    # Now distribute batches across workers (instead of individual images)
+    # ✅ Step 2: Distribute batches across workers
     batches_per_worker = np.array_split(batches, world_size)
-    assigned_batches = batches_per_worker[rank]  # Each worker gets full batches
+    assigned_batches = batches_per_worker[rank]  # Each worker processes a subset of batches
 
     feature_vectors, image_ids = [], []
+    local_results = []  # Temporary storage for intermediate results
 
-    # Process batches
+    # ✅ Step 3: Process batches
     for batch in assigned_batches:
-        batch_features = batch_feature_extraction(config, batch, feature_extractor, hdfs)
+        batch_results = batch_feature_extraction(config, batch, feature_extractor, hdfs)
 
-        # Store results
-        for img_id, feature_vector in batch_features:
-            if feature_vector is not None:
-                feature_vectors.append(feature_vector)
-                image_ids.append(img_id)
+        # ✅ Store intermediate results in memory
+        local_results.extend(batch_results)
+
+        # ✅ Step 4: Save intermediate results to prevent memory buildup
+        if len(local_results) >= SAVE_INTERVAL // BATCH_SIZE:
+            fv_temp, id_temp = zip(*local_results)  # Unzip tuples
+            feature_vectors.extend(fv_temp)
+            image_ids.extend(id_temp)
+            local_results = []  # ✅ Reset batch futures
+
+    # ✅ Step 5: Save any remaining results
+    if local_results:
+        fv_temp, id_temp = zip(*local_results)
+        feature_vectors.extend(fv_temp)
+        image_ids.extend(id_temp)
 
                            
     # Gather results across ranks
@@ -499,6 +513,7 @@ def main():
         "log_text": log_text,
         "results": results,
         "batch_size": 10,
+        "save_interval": 120,
     }
     
     # Define data file paths and sizes (in GB)
