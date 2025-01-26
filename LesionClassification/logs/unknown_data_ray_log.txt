@@ -10,47 +10,47 @@ Dataset Used: release_midas_test.xlsx
           Feature Vector Extraction
 =============================================
 
-Total Feature Extraction Duration: 274.88 seconds
+Total Feature Extraction Duration: 144.69 seconds
 
 
 ============================================
           10 Fold Cross Validation
 ============================================
 
-Total 10-Fold Duration: 6.7 seconds
+Total 10-Fold Duration: 8.3 seconds
 
 --- Duration per Fold ---
-Mean Time Per Fold:   1.0997 seconds
+Mean Time Per Fold:   3.2919 seconds
 
-Fold 1 Duration:   1.3862318992614746 seconds
-Fold 2 Duration:   1.4551029205322266 seconds
-Fold 3 Duration:   1.655665397644043 seconds
-Fold 4 Duration:   1.5205814838409424 seconds
-Fold 5 Duration:   0.8404507637023926 seconds
-Fold 6 Duration:   0.6566474437713623 seconds
-Fold 7 Duration:   0.7562036514282227 seconds
-Fold 8 Duration:   0.9245657920837402 seconds
-Fold 9 Duration:   0.8111348152160645 seconds
-Fold 10 Duration:   0.9905030727386475 seconds
+Fold 1 Duration:   4.972739934921265 seconds
+Fold 2 Duration:   2.862700939178467 seconds
+Fold 3 Duration:   3.024960994720459 seconds
+Fold 4 Duration:   3.1078481674194336 seconds
+Fold 5 Duration:   6.1687092781066895 seconds
+Fold 6 Duration:   2.1597087383270264 seconds
+Fold 7 Duration:   5.077754497528076 seconds
+Fold 8 Duration:   1.88954758644104 seconds
+Fold 9 Duration:   1.853837490081787 seconds
+Fold 10 Duration:   1.8009798526763916 seconds
 
 --- Mean Loss Per Epoch Across All Folds ---
-Epoch [1/10], Mean Loss: 0.6871
-Epoch [2/10], Mean Loss: 0.6362
-Epoch [3/10], Mean Loss: 0.5934
-Epoch [4/10], Mean Loss: 0.5605
-Epoch [5/10], Mean Loss: 0.5254
-Epoch [6/10], Mean Loss: 0.4866
-Epoch [7/10], Mean Loss: 0.4659
-Epoch [8/10], Mean Loss: 0.4202
-Epoch [9/10], Mean Loss: 0.3945
-Epoch [10/10], Mean Loss: 0.3674
+Epoch [1/10], Mean Loss: 0.706
+Epoch [2/10], Mean Loss: 0.6431
+Epoch [3/10], Mean Loss: 0.6045
+Epoch [4/10], Mean Loss: 0.5726
+Epoch [5/10], Mean Loss: 0.534
+Epoch [6/10], Mean Loss: 0.496
+Epoch [7/10], Mean Loss: 0.4618
+Epoch [8/10], Mean Loss: 0.4326
+Epoch [9/10], Mean Loss: 0.4007
+Epoch [10/10], Mean Loss: 0.3683
 
 --- Mean Metrics Across All Folds ---
-Mean Accuracy:  0.7812
-Mean Precision: 0.825
-Mean Recall:    0.8536
-Mean F1 Score:  0.8305
-Mean AUC-ROC:   0.7999
+Mean Accuracy:  0.7712
+Mean Precision: 0.8044
+Mean Recall:    0.8557
+Mean F1 Score:  0.8212
+Mean AUC-ROC:   0.8047
 
 
-Total Pipeline Duration: 289.27 seconds
+Total Pipeline Duration: 160.6 seconds

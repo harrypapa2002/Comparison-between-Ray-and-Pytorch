@@ -76,6 +76,8 @@ def get_num_nodes():
         return 0  # Return 0 if an error occurs
 
 
+# @ray.remote(num_cpus=4)
+
 @ray.remote
 def feature_vector_extraction(config, image_id, feature_extractor, hdfs):
     """Extract feature vector from a single image."""
@@ -422,12 +424,12 @@ def main():
         "hdfs_port": 9000,
         "num_nodes": get_num_nodes(),
         "epochs": 10,
-        "tabular_data": data_1_path,
+        "tabular_data": test_data_path,
         "image_data": images_folder,
         "log_text": log_text,
         "results": results,
         "load_precomputed_features": False,
-        "batch_size": 100
+        "batch_size": 60
     }
     
     # Define data file paths and sizes (in GB)
