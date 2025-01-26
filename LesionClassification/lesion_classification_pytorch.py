@@ -368,13 +368,29 @@ def distributed_pipeline(config):
     kf = KFold(n_splits=10, shuffle=True, random_state=21)
     
     # Each process picks up one fold at a time based on rank
+    # kfold_results = []
+    # for fold_idx, (train_idx, test_idx) in enumerate(kf.split(final_data)):
+    #     if fold_idx % world_size == rank:  # Assigns fold dynamically to workers
+    #         train_data = final_data.iloc[train_idx]
+    #         test_data = final_data.iloc[test_idx]
+    #         result = kfold_cross_validation(config, fold_idx, train_data, test_data, cnn_feature_columns)
+    #         kfold_results.append(result)
+    
+    # Step 1: Precompute all fold indices and store them in a list
+    all_folds = list(kf.split(final_data))
+
+    # Step 2: Manually assign folds to each worker (instead of modulus-based assignment)
+    assigned_folds = [all_folds[i] for i in range(rank, len(all_folds), world_size)]
+    
     kfold_results = []
-    for fold_idx, (train_idx, test_idx) in enumerate(kf.split(final_data)):
-        if fold_idx % world_size == rank:  # Assigns fold dynamically to workers
-            train_data = final_data.iloc[train_idx]
-            test_data = final_data.iloc[test_idx]
-            result = kfold_cross_validation(config, fold_idx, train_data, test_data, cnn_feature_columns)
-            kfold_results.append(result)
+
+    # Step 3: Process assigned folds
+    for fold_idx, (train_idx, test_idx) in assigned_folds:
+        train_data = final_data.iloc[train_idx]
+        test_data = final_data.iloc[test_idx]
+        result = kfold_cross_validation(config, fold_idx, train_data, test_data, cnn_feature_columns)
+        kfold_results.append(result)
+
 
     # Gather results across ranks
     if rank == 0:
