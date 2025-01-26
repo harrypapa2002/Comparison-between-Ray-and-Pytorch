@@ -384,6 +384,21 @@ def distributed_pipeline(config):
 
     dist.gather_object(kfold_results, gathered_results)
     
+    dist.barrier()
+    
+    # if rank == 0:
+    #     print(f"[Rank {rank}] Gathering K-Fold results from all workers...")
+
+    #     # Print gathered_results for debugging
+    #     print(f"[Rank {rank}] gathered_results (Raw): {gathered_results}")
+
+    #     # Check if gathered_results is a list of lists
+    #     if isinstance(gathered_results[0], list):  # Nested list detected
+    #         gathered_results = [item for sublist in gathered_results for item in sublist]  # Flatten it
+
+    #     print(f"[Rank {rank}] gathered_results (Flattened): {gathered_results}")
+
+    
     # Aggregate results and log metrics (only on rank 0)
     if rank == 0:
         fold_epoch_losses = [result["epoch_losses"] for result in gathered_results]
