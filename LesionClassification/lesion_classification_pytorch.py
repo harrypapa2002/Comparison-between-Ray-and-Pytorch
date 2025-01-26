@@ -377,17 +377,10 @@ def distributed_pipeline(config):
             kfold_results.append(result)
 
     # Gather results across ranks
-    # if rank == 0:
-    #     gathered_results = [None for _ in range(world_size)]
-    # else:
-    #     gathered_results = None
-        
     if rank == 0:
-        gathered_results = []
+        gathered_results = [None for _ in range(world_size)]
     else:
         gathered_results = None
-
-    dist.gather_object(kfold_results if kfold_results else [], gathered_results)
 
     dist.gather_object(kfold_results, gathered_results)
     
