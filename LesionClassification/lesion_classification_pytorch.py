@@ -311,10 +311,7 @@ def distributed_pipeline(config):
     dist.gather_object(feature_vectors, gathered_fv)
     dist.gather_object(image_ids, gathered_ids)
 
-    print(f"[Rank {rank}] Reached the barrier before feature aggregation")
     dist.barrier()  # Synchronize all ranks before continuing
-    print(f"[Rank {rank}] Passed the barrier after feature aggregation")
-
 
     # Rank 0 aggregates the results
     if rank == 0:
@@ -336,10 +333,7 @@ def distributed_pipeline(config):
     else:
         to_broadcast = [None, None]
 
-    if rank == 0:
-        print(f"[Rank {rank}] Broadcasting feature vectors...")
     dist.broadcast_object_list(to_broadcast, src=0)
-    print(f"[Rank {rank}] Broadcast completed.")
 
     final_data = to_broadcast[0]
     cnn_feature_columns = to_broadcast[1]
@@ -392,7 +386,7 @@ def distributed_pipeline(config):
     
     # Aggregate results and log metrics (only on rank 0)
     if rank == 0:
-        fold_epoch_losses = [result["epoch_losses"] for result in kfold_results]
+        fold_epoch_losses = [result["epoch_losses"] for result in gathered_results]
         num_epochs = len(fold_epoch_losses[0])  # Assumes all folds have the same number of epochs
         mean_epoch_losses = [
             round(np.mean([fold_losses[epoch_idx] for fold_losses in fold_epoch_losses]), 4)
@@ -401,12 +395,12 @@ def distributed_pipeline(config):
         
         # Calculate mean metrics across folds
         mean_metrics = {
-            "accuracy": round(np.mean([result["evaluation_metrics"]["accuracy"] for result in kfold_results]), 4),
-            "precision": round(np.mean([result["evaluation_metrics"]["precision"] for result in kfold_results]), 4),
-            "recall": round(np.mean([result["evaluation_metrics"]["recall"] for result in kfold_results]), 4),
-            "f1": round(np.mean([result["evaluation_metrics"]["f1"] for result in kfold_results]), 4),
-            "roc_auc": round(np.mean([result["evaluation_metrics"]["roc_auc"] for result in kfold_results]), 4),
-            "fold_duration": round(np.mean([result["fold_duration"] for result in kfold_results]), 4),
+            "accuracy": round(np.mean([result["evaluation_metrics"]["accuracy"] for result in gathered_results]), 4),
+            "precision": round(np.mean([result["evaluation_metrics"]["precision"] for result in gathered_results]), 4),
+            "recall": round(np.mean([result["evaluation_metrics"]["recall"] for result in gathered_results]), 4),
+            "f1": round(np.mean([result["evaluation_metrics"]["f1"] for result in gathered_results]), 4),
+            "roc_auc": round(np.mean([result["evaluation_metrics"]["roc_auc"] for result in gathered_results]), 4),
+            "fold_duration": round(np.mean([result["fold_duration"] for result in gathered_results]), 4),
         }
         config["results"]["Mean Accuracy"] = mean_metrics["accuracy"]
         config["results"]["Mean Precision"] = mean_metrics["precision"]
@@ -433,7 +427,7 @@ def distributed_pipeline(config):
         
         log_text.append(f"\n--- Duration per Fold ---")
         log_text.append(f"Mean Time Per Fold:   {mean_metrics['fold_duration']} seconds\n")
-        for result in kfold_results:
+        for result in gathered_results:
             fold_idx = result["fold_idx"]
             log_text.append(f"Fold {fold_idx+1} Duration:   {result['fold_duration']} seconds")
         
@@ -521,8 +515,8 @@ def main():
             dataset_number = int(tabular_file.split("_")[1].split(".")[0])  # Extract dataset number (1, 2, 3)
             dataset_size = datasets[tabular_file]
             dataset_info = f"Dataset Used: {tabular_file} ({dataset_size:.2f} GB)"
-            log_filename = f"pytorch_data{dataset_number}_node{config['world_size']/config['num_procs']}.txt"
-            results_filename = f"pytorch_data{dataset_number}_node{config['world_size']/config['num_procs']}.json"
+            log_filename = f"pytorch_data{dataset_number}_node{int(config['world_size']/config['num_procs'])}.txt"
+            results_filename = f"pytorch_data{dataset_number}_node{int(config['world_size']/config['num_procs'])}.json"
             results["Dataset"] = dataset_number
         else:
             dataset_info = f"Dataset Used: {tabular_file}"
