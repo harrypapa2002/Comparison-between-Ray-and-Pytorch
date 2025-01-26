@@ -388,7 +388,7 @@ def distributed_pipeline(config):
     
     # Aggregate results and log metrics (only on rank 0)
     if rank == 0:
-        fold_epoch_losses = [result["epoch_losses"] for result in kfold_results]
+        fold_epoch_losses = [result["epoch_losses"] for result in gathered_results]
         num_epochs = len(fold_epoch_losses[0])  # Assumes all folds have the same number of epochs
         mean_epoch_losses = [
             round(np.mean([fold_losses[epoch_idx] for fold_losses in fold_epoch_losses]), 4)
@@ -397,12 +397,12 @@ def distributed_pipeline(config):
         
         # Calculate mean metrics across folds
         mean_metrics = {
-            "accuracy": round(np.mean([result["evaluation_metrics"]["accuracy"] for result in kfold_results]), 4),
-            "precision": round(np.mean([result["evaluation_metrics"]["precision"] for result in kfold_results]), 4),
-            "recall": round(np.mean([result["evaluation_metrics"]["recall"] for result in kfold_results]), 4),
-            "f1": round(np.mean([result["evaluation_metrics"]["f1"] for result in kfold_results]), 4),
-            "roc_auc": round(np.mean([result["evaluation_metrics"]["roc_auc"] for result in kfold_results]), 4),
-            "fold_duration": round(np.mean([result["fold_duration"] for result in kfold_results]), 4),
+            "accuracy": round(np.mean([result["evaluation_metrics"]["accuracy"] for result in gathered_results]), 4),
+            "precision": round(np.mean([result["evaluation_metrics"]["precision"] for result in gathered_results]), 4),
+            "recall": round(np.mean([result["evaluation_metrics"]["recall"] for result in gathered_results]), 4),
+            "f1": round(np.mean([result["evaluation_metrics"]["f1"] for result in gathered_results]), 4),
+            "roc_auc": round(np.mean([result["evaluation_metrics"]["roc_auc"] for result in gathered_results]), 4),
+            "fold_duration": round(np.mean([result["fold_duration"] for result in gathered_results]), 4),
         }
         config["results"]["Mean Accuracy"] = mean_metrics["accuracy"]
         config["results"]["Mean Precision"] = mean_metrics["precision"]
@@ -429,7 +429,7 @@ def distributed_pipeline(config):
         
         log_text.append(f"\n--- Duration per Fold ---")
         log_text.append(f"Mean Time Per Fold:   {mean_metrics['fold_duration']} seconds\n")
-        for result in kfold_results:
+        for result in gathered_results:
             fold_idx = result["fold_idx"]
             log_text.append(f"Fold {fold_idx+1} Duration:   {result['fold_duration']} seconds")
         
