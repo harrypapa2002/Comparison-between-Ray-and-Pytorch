@@ -78,7 +78,7 @@ def get_num_nodes():
 
 # @ray.remote(num_cpus=4)
 
-@ray.remote
+# @ray.remote
 def feature_vector_extraction(config, image_id, feature_extractor, hdfs):
     """Extract feature vector from a single image."""
 
@@ -117,6 +117,16 @@ def feature_vector_extraction(config, image_id, feature_extractor, hdfs):
         print(f"Error processing image {image_id}: {e}")
         return None, None  # Return None if an error occurs
 
+
+@ray.remote
+def batch_feature_extraction(config, image_ids, feature_extractor, hdfs):
+    """Extract features for a batch of images at once."""
+    batch_results = []
+    for image_id in image_ids:
+        feature_vector = feature_vector_extraction(config, image_id, feature_extractor, hdfs)
+        batch_results.append((image_id, feature_vector))
+
+    return batch_results  # ✅ Return feature vectors for the whole batch
 
 
 
@@ -279,16 +289,40 @@ def distributed_pipeline(config):
         
     # fve_results = ray.get(futures)
     
+    # fve_results = []
+
+    # for i in range(0, len(preprocessed_data['midas_file_name']), config["batch_size"]):
+    #     batch_futures = [
+    #         feature_vector_extraction.remote(config, image_id, feature_extractor, hdfs)
+    #         for image_id in preprocessed_data['midas_file_name'][i:i+config["batch_size"]]
+    #     ]
+        
+    #     batch_results = ray.get(batch_futures)  # Retrieve 20 at a time
+    #     fve_results.extend(batch_results)
+    
     fve_results = []
+    futures = []
 
     for i in range(0, len(preprocessed_data['midas_file_name']), config["batch_size"]):
-        batch_futures = [
-            feature_vector_extraction.remote(config, image_id, feature_extractor, hdfs)
-            for image_id in preprocessed_data['midas_file_name'][i:i+config["batch_size"]]
-        ]
-        
-        batch_results = ray.get(batch_futures)  # Retrieve 20 at a time
-        fve_results.extend(batch_results)
+        batch = preprocessed_data['midas_file_name'][i:i+config["batch_size"]]
+
+        # ✅ Submit batch of 10 images as a single task
+        future = batch_feature_extraction.remote(config, batch, feature_extractor, hdfs)
+        futures.append(future)
+
+        # ✅ Retrieve and save results every 100 images
+        if len(futures) >= config["save_interval"] // config["batch_size"]:
+            batch_results = ray.get(futures)  # ✅ Get results for 100 images
+            for batch in batch_results:
+                fve_results.extend(batch)  # ✅ Append to results array
+
+            futures = []  # ✅ Reset batch futures to avoid memory buildup
+
+    # ✅ Retrieve remaining results after all tasks are submitted
+    if futures:
+        batch_results = ray.get(futures)
+        for batch in batch_results:
+            fve_results.extend(batch)
         
     feature_vectors, image_ids = [], []
     for fv, ids in fve_results:
@@ -429,7 +463,8 @@ def main():
         "log_text": log_text,
         "results": results,
         "load_precomputed_features": False,
-        "batch_size": 60
+        "batch_size": 10,
+        "save_interval": 100
     }
     
     # Define data file paths and sizes (in GB)
