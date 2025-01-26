@@ -1,0 +1,56 @@
+======================================
+      Pipeline Execution Summary
+======================================
+
+Number of Nodes: 3
+Dataset Used: data_3.xlsx (3.37 GB)
+
+
+=============================================
+          Feature Vector Extraction
+=============================================
+
+Total Feature Extraction Duration: 305.85 seconds
+
+
+============================================
+          10 Fold Cross Validation
+============================================
+
+Total 10-Fold Duration: 17.35 seconds
+
+--- Duration per Fold ---
+Mean Time Per Fold:   10.5798 seconds
+
+Fold 1 Duration:   14.556253910064697 seconds
+Fold 2 Duration:   14.956981420516968 seconds
+Fold 3 Duration:   14.178056955337524 seconds
+Fold 4 Duration:   14.325178861618042 seconds
+Fold 5 Duration:   8.408896207809448 seconds
+Fold 6 Duration:   8.384514331817627 seconds
+Fold 7 Duration:   7.84999680519104 seconds
+Fold 8 Duration:   7.009721040725708 seconds
+Fold 9 Duration:   8.124745845794678 seconds
+Fold 10 Duration:   8.00395679473877 seconds
+
+--- Mean Loss Per Epoch Across All Folds ---
+Epoch [1/10], Mean Loss: 0.6667
+Epoch [2/10], Mean Loss: 0.6099
+Epoch [3/10], Mean Loss: 0.5814
+Epoch [4/10], Mean Loss: 0.5608
+Epoch [5/10], Mean Loss: 0.5433
+Epoch [6/10], Mean Loss: 0.5175
+Epoch [7/10], Mean Loss: 0.5018
+Epoch [8/10], Mean Loss: 0.4933
+Epoch [9/10], Mean Loss: 0.4764
+Epoch [10/10], Mean Loss: 0.4628
+
+--- Mean Metrics Across All Folds ---
+Mean Accuracy:  0.6918
+Mean Precision: 0.7017
+Mean Recall:    0.7115
+Mean F1 Score:  0.7006
+Mean AUC-ROC:   0.7678
+
+
+Total Pipeline Duration: 331.24 seconds
