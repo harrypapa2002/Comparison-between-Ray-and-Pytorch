@@ -500,7 +500,7 @@ def main():
     
     if rank == 0:
         
-        results["Nodes"] = config["world_size"]/config['num_procs']
+        results["Nodes"] = config["world_size"]/config["num_procs"]
         
         # --- Identify dataset number and size ---
         dataset_number = None
@@ -515,7 +515,7 @@ def main():
         else:
             dataset_info = f"Dataset Used: {tabular_file}"
             log_filename = f"unknown_data_pytorch_log.txt"
-            results["Dataset"] = "unknown"
+            # results["Dataset"] = "unknown"
             
         # Log pipeline initialization
         log_text.append(f"======================================")
