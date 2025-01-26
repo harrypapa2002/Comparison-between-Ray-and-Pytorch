@@ -4,6 +4,8 @@ import pandas as pd
 import time
 import json
 from PIL import Image
+import io
+from pyarrow.fs import HadoopFileSystem
 import torch
 import torch.nn as nn
 import torch.distributed as dist
@@ -68,34 +70,49 @@ def cleanup():
     dist.destroy_process_group()
 
 
-def feature_vector_extraction(image_path, feature_extractor):
+def feature_vector_extraction(config, image_id, feature_extractor, hdfs):
     """Extract feature vector from a single image."""
 
-    # Define the preprocessing steps
+    # Image preprocessing function
     preprocess = transforms.Compose([
-        transforms.Resize((224, 224)),  # Resize the image
-        transforms.ToTensor(),  # Convert the image to a tensor
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),  # Normalize as per ResNet50
+        transforms.Resize((224, 224)),  # Resize to 224x224
+        transforms.ToTensor(),  # Convert to tensor
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),  # Normalize for ResNet50
     ])
-
+    
     try:
-        # Preprocess the image
-        img = Image.open(image_path).convert("RGB")  # Ensure the image is RGB
-        img_tensor = preprocess(img)  # Apply transformations
-        preprocessed_img = img_tensor.unsqueeze(0) # Add batch dimension
+        # Construct the full image path in HDFS
+        image_path = f"{config['image_data']}/{image_id}"
+
+        # Read the image file as binary
+        with hdfs.open_input_file(image_path) as file:
+            image_data = file.read()
+
+        # Convert binary data to PIL image
+        img = Image.open(io.BytesIO(image_data)).convert("RGB")
+        
+        img_tensor = preprocess(img)  
+        preprocessed_img = img_tensor.unsqueeze(0)
 
         # Extract feature vector
         with torch.no_grad():
-            # features = feature_extractor(preprocessed_img)  # No need for unsqueeze
-            # features = features.view(features.size(0), -1)
-            # feature_vector = features.numpy()
-            feature_vector = feature_extractor(preprocessed_img).squeeze().numpy()
-
-        return feature_vector  # Return only the feature vector
+            feature_vector = feature_extractor(preprocessed_img).squeeze().numpy().astype(np.float16)
+        
+        return feature_vector, image_id 
 
     except Exception as e:
-        print(f"Error processing image {image_path}: {e}")
-        return None
+        print(f"Error processing image {image_id}: {e}")
+        return None, None  
+
+
+def batch_feature_extraction(config, batch, feature_extractor, hdfs):
+    """Extract features for a batch of images at once."""
+    batch_results = []
+    for image_id in batch:
+        result = feature_vector_extraction(config, image_id, feature_extractor, hdfs)
+        batch_results.append(result)
+
+    return batch_results  # Return results for the whole batch
 
 
 def train_and_test(config):
@@ -216,9 +233,25 @@ def distributed_pipeline(config):
     rank = config["rank"]
     world_size = config["world_size"]
     
+    try:
+        hdfs = HadoopFileSystem(host=config["hdfs_host"], port=config["hdfs_port"])
+        print(f"Connected to HDFS at {config['hdfs_host']}:{config['hdfs_port']}.")
+        
+    except Exception as e:
+        print(f"Failed to connect to HDFS: {e}")
+        
+    
     if rank == 0:
         print("Loading and preprocessing tabular data...")
-    tabular_data = pd.read_excel(config['tabular_data'])
+    try:
+        with hdfs.open_input_file(config["tabular_data"]) as file:
+            tabular_data = pd.read_excel(file)
+            print(f"Successfully loaded {len(tabular_data)} rows from {config['tabular_data']}.")
+
+    except Exception as e:
+        print(f"Failed to load data from HDFS: {e}")
+        return None 
+
     preprocessed_data = tabular_data_preprocessing(tabular_data)
     
     # Setup distributed environment
@@ -228,53 +261,60 @@ def distributed_pipeline(config):
         print("Feature extraction from images...")
         
     feature_extraction_start_time = time.time()
-    
-    if config.get("load_precomputed_features", True):
-        if rank == 0:
-            print("Loading precomputed feature vectors and image IDs...")
-        feature_vectors = np.load("data/feature_vectors_mb.npy")
-        image_ids = np.load("data/image_ids_mb.npy", allow_pickle=True)
-    else:
+
         
-        # Load the ResNet50 model pre-trained on ImageNet
-        base_model = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V1)
-        base_model.eval()  # Set to evaluation mode
+    # Load the ResNet50 model pre-trained on ImageNet
+    base_model = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V1)
+    base_model.eval()  # Set to evaluation mode
 
-        # Remove the fully connected layer (extract feature vectors only)
-        feature_extractor = torch.nn.Sequential(*list(base_model.children())[:-1])
+    # Remove the fully connected layer (extract feature vectors only)
+    feature_extractor = torch.nn.Sequential(*list(base_model.children())[:-1])
 
-        # Split images across workers dynamically (one image task per worker)
-        images_per_worker = np.array_split(preprocessed_data["midas_file_name"], world_size)
-        assigned_images = images_per_worker[rank]  # Assign images to the worker based on rank
+    # Split images across workers dynamically (one image task per worker)
+    images_per_worker = np.array_split(preprocessed_data["midas_file_name"], world_size)
+    assigned_images = images_per_worker[rank]  # Assign images to the worker based on rank
 
-        feature_vectors, image_ids = [], []
+    feature_vectors, image_ids = [], []
         
-        for image_id in assigned_images:
-            image_path = os.path.join(config["image_data"], image_id)
-            feature_vector = feature_vector_extraction(image_path, feature_extractor)
+    # for image_id in assigned_images:
+    #     image_path = os.path.join(config["image_data"], image_id)
+    #     feature_vector = feature_vector_extraction(image_path, feature_extractor)
 
+    #     if feature_vector is not None:
+    #         feature_vectors.append(feature_vector)
+    #         image_ids.append(image_id)
+     
+    # Process images in batches
+    for i in range(0, len(assigned_images), config["batch_size"]):
+        batch = assigned_images[i:i + config["batch_size"]]  # Get a batch of images
+        
+        # Call batch_feature_extraction instead of single image extraction
+        batch_features = batch_feature_extraction(config, batch, feature_extractor, hdfs)
+
+        # Store results
+        for img_id, feature_vector in batch_features:
             if feature_vector is not None:
                 feature_vectors.append(feature_vector)
-                image_ids.append(image_id)
-                
-        # Gather results across ranks
-        if rank == 0:
-            gathered_fv = [None for _ in range(world_size)]
-            gathered_ids = [None for _ in range(world_size)]
-        else:
-            gathered_fv = None
-            gathered_ids = None
+                image_ids.append(img_id)
+                           
+    # Gather results across ranks
+    if rank == 0:
+        gathered_fv = [None for _ in range(world_size)]
+        gathered_ids = [None for _ in range(world_size)]
+    else:
+        gathered_fv = None
+        gathered_ids = None
 
-        dist.gather_object(feature_vectors, gathered_fv)
-        dist.gather_object(image_ids, gathered_ids)
+    dist.gather_object(feature_vectors, gathered_fv)
+    dist.gather_object(image_ids, gathered_ids)
 
-        dist.barrier()  # Synchronize all ranks before continuing
+    dist.barrier()  # Synchronize all ranks before continuing
 
-        # Rank 0 aggregates the results
-        if rank == 0:
-            feature_vectors = np.vstack(gathered_fv)
-            image_ids = np.hstack(gathered_ids)
-            print(f"Feature extraction completed with {len(image_ids)} images.")
+    # Rank 0 aggregates the results
+    if rank == 0:
+        feature_vectors = np.vstack(gathered_fv)
+        image_ids = np.hstack(gathered_ids)
+        print(f"Feature extraction completed with {len(image_ids)} images.")
 
     feature_extraction_end_time = time.time()
     feature_extraction_duration = round(feature_extraction_end_time - feature_extraction_start_time, 2)
@@ -438,14 +478,17 @@ def main():
         raise RuntimeError("Environment variables RANK and WORLD_SIZE must be set. Use torchrun to run the program.")
 
     config = {
+        "hdfs_host": "192.168.0.1",
+        "hdfs_port": 9000,
         "rank":  rank,
         "world_size": world_size,
+        "num_procs": 4,
         "epochs": 10,
         "tabular_data": data_1_path,
         "image_data": images_folder,
         "log_text": log_text,
         "results": results,
-        "load_precomputed_features": False
+        "batch_size": 10,
     }
     
     # Define data file paths and sizes (in GB)
@@ -457,16 +500,17 @@ def main():
     
     if rank == 0:
         
-        results["Nodes"] = config["world_size"]
+        results["Nodes"] = config["world_size"]/config['num_procs']
         
         # --- Identify dataset number and size ---
+        dataset_number = None
         tabular_file = os.path.basename(config["tabular_data"])  # Extract filename
         if tabular_file in datasets:
             dataset_number = int(tabular_file.split("_")[1].split(".")[0])  # Extract dataset number (1, 2, 3)
             dataset_size = datasets[tabular_file]
             dataset_info = f"Dataset Used: {tabular_file} ({dataset_size:.2f} GB)"
-            log_filename = f"pytorch_data{dataset_number}_node{config['world_size']}.txt"
-            results_filename = f"pytorch_data{dataset_number}_node{config['world_size']}.json"
+            log_filename = f"pytorch_data{dataset_number}_node{config['world_size']/config['num_procs']}.txt"
+            results_filename = f"pytorch_data{dataset_number}_node{config['world_size']/config['num_procs']}.json"
             results["Dataset"] = dataset_number
         else:
             dataset_info = f"Dataset Used: {tabular_file}"
@@ -477,7 +521,7 @@ def main():
         log_text.append(f"======================================")
         log_text.append(f"      Pipeline Execution Summary")
         log_text.append(f"======================================")
-        log_text.append(f"\nNumber of Workers: {config['world_size']}")
+        log_text.append(f"\nNumber of Nodes: {config['world_size']/config['num_procs']}")
         log_text.append(dataset_info)  # Add dataset name and size (if available)
 
     pipeline_start_time = time.time()
@@ -492,7 +536,7 @@ def main():
         
         log_text.append(f"\nTotal Pipeline Duration: {pipeline_duration} seconds")
         
-        log_dir = "local_logs"
+        log_dir = "logs"
         os.makedirs(log_dir, exist_ok=True)
         log_file = os.path.join(log_dir, log_filename)
         with open(log_file, "w") as file:
@@ -500,7 +544,7 @@ def main():
         print(f"Log saved to {log_file}")
         
         if dataset_number is not None:
-            results_dir = "local_results"
+            results_dir = "results"
             os.makedirs(results_dir, exist_ok=True)
             results_file = os.path.join(results_dir, results_filename)
             with open(results_file, "w") as file:

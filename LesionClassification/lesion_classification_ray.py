@@ -109,10 +109,10 @@ def feature_vector_extraction(config, image_id, feature_extractor, hdfs):
 
 
 @ray.remote
-def batch_feature_extraction(config, image_ids, feature_extractor, hdfs):
+def batch_feature_extraction(config, batch, feature_extractor, hdfs):
     """Extract features for a batch of images at once."""
     batch_results = []
-    for image_id in image_ids:
+    for image_id in batch:
         result = feature_vector_extraction(config, image_id, feature_extractor, hdfs)
         batch_results.append(result)
 
