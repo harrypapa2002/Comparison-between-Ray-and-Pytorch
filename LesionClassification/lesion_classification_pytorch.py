@@ -444,12 +444,14 @@ def distributed_pipeline(config):
 
 def main():
     
-    tabular_data_path = "data/release_midas.xlsx"
-    test_data_path = "data/release_midas_test.xlsx"
-    data_1_path = "data/data_1.xlsx"
-    data_2_path = "data/data_2.xlsx"
-    data_3_path = "data/data_3.xlsx"
-    images_folder = "C:/Users/nikol/Desktop/university/9th_semester/physiological_systems_simulation/project/dataset/midasmultimodalimagedatasetforaibasedskincancer"
+    tabular_data_path = "/data/mra_midas/release_midas.xlsx"
+    test_data_path = "/data/mra_midas/release_midas_test.xlsx"
+    data_1_path = "/data/mra_midas/data_1.xlsx"
+    data_2_path = "/data/mra_midas/data_2.xlsx"
+    data_3_path = "/data/mra_midas/data_3.xlsx"
+    images_folder = "/data/mra_midas/images"
+    
+    log_text = []
     
     # --- Initialize results dictionary ---
     results = {
@@ -466,8 +468,6 @@ def main():
         "Mean F1 Score": None,
         "Mean AUC-ROC": None
     }
-    
-    log_text = []
     
     # Rank and world size from environment variables
     rank = int(os.getenv("RANK", -1))
