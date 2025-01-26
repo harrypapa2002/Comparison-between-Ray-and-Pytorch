@@ -1,5 +1,4 @@
 import pandas as pd
-import numpy as np
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
 
@@ -131,8 +130,8 @@ def tabular_data_preprocessing(dataset):
 
 def combine_features(feature_vectors, image_ids, preprocessed_data):
     # Match feature vectors with preprocessed data using the file name
-    feature_vector_map = {str(img_id): vec.astype(np.float32) for img_id, vec in zip(image_ids, feature_vectors)}
-    preprocessed_data["cnn_features"] = preprocessed_data["midas_file_name"].map(feature_vector_map).astype(str)
+    feature_vector_map = {img_id: vec for img_id, vec in zip(image_ids, feature_vectors)}
+    preprocessed_data["cnn_features"] = preprocessed_data["midas_file_name"].map(feature_vector_map)
 
     # Drop rows where CNN features are missing (e.g., due to failed processing)
     preprocessed_data = preprocessed_data.dropna(subset=["cnn_features"])
