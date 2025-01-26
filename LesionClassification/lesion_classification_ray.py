@@ -72,8 +72,8 @@ def get_num_nodes():
         print(f"Error getting active nodes: {e}")
         return 0  # Return 0 if an error occurs
 
-@ray.remote
-def feature_vector_extraction(config, batch, feature_extractor, hdfs):
+
+def feature_vector_extraction(config, image_id, feature_extractor, hdfs):
     """Extract feature vector from a single image."""
 
     # Image preprocessing function
@@ -83,34 +83,41 @@ def feature_vector_extraction(config, batch, feature_extractor, hdfs):
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),  # Normalize for ResNet50
     ])
     
+    try:
+        # Construct the full image path in HDFS
+        image_path = f"{config['image_data']}/{image_id}"
+
+        # Read the image file as binary
+        with hdfs.open_input_file(image_path) as file:
+            image_data = file.read()
+
+        # Convert binary data to PIL image
+        img = Image.open(io.BytesIO(image_data)).convert("RGB")
+        
+        img_tensor = preprocess(img)  
+        preprocessed_img = img_tensor.unsqueeze(0)
+
+        # Extract feature vector
+        with torch.no_grad():
+            feature_vector = feature_extractor(preprocessed_img).squeeze().numpy().astype(np.float16)
+        
+        return feature_vector, image_id 
+
+    except Exception as e:
+        print(f"Error processing image {image_id}: {e}")
+        return None, None  
+
+
+@ray.remote
+def batch_feature_extraction(config, image_ids, feature_extractor, hdfs):
+    """Extract features for a batch of images at once."""
     batch_results = []
-    
-    for image_id in batch:
-        try:
-            # Construct the full image path in HDFS
-            image_path = f"{config['image_data']}/{image_id}"
+    for image_id in image_ids:
+        result = feature_vector_extraction(config, image_id, feature_extractor, hdfs)
+        batch_results.append(result)
 
-            # Read the image file as binary
-            with hdfs.open_input_file(image_path) as file:
-                image_data = file.read()
+    return batch_results  # Return results for the whole batch
 
-            # Convert binary data to PIL image
-            img = Image.open(io.BytesIO(image_data)).convert("RGB")
-            
-            img_tensor = preprocess(img)  
-            preprocessed_img = img_tensor.unsqueeze(0)
-
-            # Extract feature vector
-            with torch.no_grad():
-                feature_vector = feature_extractor(preprocessed_img).squeeze().numpy().astype(np.float16)
-            
-            batch_results.append((image_id, feature_vector))
-
-        except Exception as e:
-            print(f"Error processing image {image_id}: {e}")
-            continue
-            
-    return batch_results
 
 
 def train_and_test(config):
@@ -260,13 +267,14 @@ def distributed_pipeline(config):
     # Remove the fully connected layer (extract feature vectors only)
     feature_extractor = torch.nn.Sequential(*list(base_model.children())[:-1])
     
-    fve_results, futures = [], []
+    fve_results = []
+    futures = []
 
     for i in range(0, len(preprocessed_data['midas_file_name']), config["batch_size"]):
         batch = preprocessed_data['midas_file_name'][i:i+config["batch_size"]]
 
         # Submit batch of images as a single task
-        batch_futures = feature_vector_extraction.remote(config, batch, feature_extractor, hdfs)
+        batch_futures = batch_feature_extraction.remote(config, batch, feature_extractor, hdfs)
         futures.append(batch_futures)
 
         # Retrieve and save results after some images to relief memory
