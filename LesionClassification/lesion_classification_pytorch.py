@@ -293,9 +293,8 @@ def distributed_pipeline(config):
     all_images = list(preprocessed_data["midas_file_name"])  # Convert to list for slicing
     batches = [all_images[i:i + BATCH_SIZE] for i in range(0, len(all_images), BATCH_SIZE)]
 
-    # ✅ Step 2: Distribute batches across workers
-    batches_per_worker = np.array_split(batches, world_size)
-    assigned_batches = batches_per_worker[rank]  # Each worker processes a subset of batches
+    # ✅ Step 2: Manually assign batches to workers (instead of np.array_split)
+    assigned_batches = [batches[i] for i in range(rank, len(batches), world_size)]
 
     feature_vectors, image_ids = [], []
     local_results = []  # Temporary storage for intermediate results
@@ -320,6 +319,7 @@ def distributed_pipeline(config):
         feature_vectors.extend(fv_temp)
         image_ids.extend(id_temp)
 
+    # ✅ Step 6: Gather results across ranks
                            
     # Gather results across ranks
     if rank == 0:
