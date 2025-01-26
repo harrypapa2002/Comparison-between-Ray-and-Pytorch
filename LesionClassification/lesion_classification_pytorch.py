@@ -430,7 +430,7 @@ def distributed_pipeline(config):
         
         log_text.append(f"\n--- Mean Loss Per Epoch Across All Folds ---")
         for epoch_idx, mean_loss in enumerate(mean_epoch_losses, start=1):
-            log_text.append(f"Epoch [{epoch_idx}/{config["epochs"]}], Mean Loss: {mean_loss:.4f}")
+            log_text.append(f"Epoch [{epoch_idx}/{config['epochs']}], Mean Loss: {mean_loss:.4f}")
             
         # Log mean metrics
         log_text.append(f"\n--- Mean Metrics Across All Folds ---")
