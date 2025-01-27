@@ -10,40 +10,47 @@ Dataset Used: release_midas_test.xlsx
           Feature Vector Extraction
 =============================================
 
-Total Feature Extraction Duration: 24.52 seconds
+Total Feature Extraction Duration: 25.13 seconds
 
 
 ============================================
           10 Fold Cross Validation
 ============================================
 
-Total 10-Fold Duration: 2.31 seconds
+Total 10-Fold Duration: 2.27 seconds
 
 --- Duration per Fold ---
-Mean Time Per Fold:   0.7392 seconds
+Mean Time Per Fold:   0.7232 seconds
 
-Fold 1 Duration:   0.7398068904876709 seconds
-Fold 5 Duration:   0.7500162124633789 seconds
-Fold 9 Duration:   0.7278213500976562 seconds
+Fold 1 Duration:   0.7469003200531006 seconds
+Fold 5 Duration:   0.659602165222168 seconds
+Fold 9 Duration:   0.6123929023742676 seconds
+Fold 2 Duration:   0.7967433929443359 seconds
+Fold 6 Duration:   0.7319765090942383 seconds
+Fold 10 Duration:   0.7184779644012451 seconds
+Fold 3 Duration:   0.7550044059753418 seconds
+Fold 7 Duration:   0.6523191928863525 seconds
+Fold 4 Duration:   0.8943085670471191 seconds
+Fold 8 Duration:   0.6639449596405029 seconds
 
 --- Mean Loss Per Epoch Across All Folds ---
-Epoch [1/10], Mean Loss: 0.6859
-Epoch [2/10], Mean Loss: 0.6212
-Epoch [3/10], Mean Loss: 0.5921
-Epoch [4/10], Mean Loss: 0.5566
-Epoch [5/10], Mean Loss: 0.5211
-Epoch [6/10], Mean Loss: 0.4799
-Epoch [7/10], Mean Loss: 0.4455
-Epoch [8/10], Mean Loss: 0.4193
-Epoch [9/10], Mean Loss: 0.3748
-Epoch [10/10], Mean Loss: 0.3539
+Epoch [1/10], Mean Loss: 0.6765
+Epoch [2/10], Mean Loss: 0.6170
+Epoch [3/10], Mean Loss: 0.5892
+Epoch [4/10], Mean Loss: 0.5450
+Epoch [5/10], Mean Loss: 0.5140
+Epoch [6/10], Mean Loss: 0.4664
+Epoch [7/10], Mean Loss: 0.4393
+Epoch [8/10], Mean Loss: 0.4027
+Epoch [9/10], Mean Loss: 0.3734
+Epoch [10/10], Mean Loss: 0.3460
 
 --- Mean Metrics Across All Folds ---
-Mean Accuracy:  0.7056
-Mean Precision: 0.7242
-Mean Recall:    0.7602
-Mean F1 Score:  0.7259
-Mean AUC-ROC:   0.819
+Mean Accuracy:  0.7667
+Mean Precision: 0.8251
+Mean Recall:    0.8043
+Mean F1 Score:  0.8085
+Mean AUC-ROC:   0.8123
 
 
-Total Pipeline Duration: 32.56 seconds
+Total Pipeline Duration: 34.54 seconds
