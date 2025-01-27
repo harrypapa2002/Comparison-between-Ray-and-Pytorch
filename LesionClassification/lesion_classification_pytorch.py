@@ -394,7 +394,10 @@ def distributed_pipeline(config):
         result = kfold_cross_validation(config, fold_idx, train_data, test_data, cnn_feature_columns)
         kfold_results.append(result)
 
-
+    # Ensure each rank contributes something to dist.gather_object
+    if not kfold_results:
+        kfold_results = [{}]  # Avoid empty lists causing gathering issues
+        
     # Gather results across ranks
     if rank == 0:
         gathered_results = [None for _ in range(world_size)]
@@ -406,6 +409,7 @@ def distributed_pipeline(config):
     dist.barrier()
     
     if rank == 0:
+        # gathered_results = [res for res in gathered_results if res]  # Remove empty results
         # Flatten gathered_results into a single list of dictionaries
         kfold_results = [result for worker_results in gathered_results for result in worker_results]
         
