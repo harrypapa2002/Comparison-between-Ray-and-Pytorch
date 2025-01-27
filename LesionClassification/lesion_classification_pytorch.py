@@ -369,15 +369,6 @@ def distributed_pipeline(config):
     
     kf = KFold(n_splits=10, shuffle=True, random_state=21)
     
-    # Each process picks up one fold at a time based on rank
-    # kfold_results = []
-    # for fold_idx, (train_idx, test_idx) in enumerate(kf.split(final_data)):
-    #     if fold_idx % world_size == rank:  # Assigns fold dynamically to workers
-    #         train_data = final_data.iloc[train_idx]
-    #         test_data = final_data.iloc[test_idx]
-    #         result = kfold_cross_validation(config, fold_idx, train_data, test_data, cnn_feature_columns)
-    #         kfold_results.append(result)
-    
     # Step 1: Precompute all fold indices and store them in a list WITH INDEX
     all_folds = [(fold_idx, train_idx, test_idx) for fold_idx, (train_idx, test_idx) in enumerate(kf.split(final_data))]
 
@@ -393,10 +384,6 @@ def distributed_pipeline(config):
         test_data = final_data.iloc[test_idx]
         result = kfold_cross_validation(config, fold_idx, train_data, test_data, cnn_feature_columns)
         kfold_results.append(result)
-
-    # Ensure each rank contributes something to dist.gather_object
-    if not kfold_results:
-        kfold_results = [{}]  # Avoid empty lists causing gathering issues
         
     # Gather results across ranks
     if rank == 0:
@@ -408,14 +395,10 @@ def distributed_pipeline(config):
     
     dist.barrier()
     
-    if rank == 0:
-        # gathered_results = [res for res in gathered_results if res]  # Remove empty results
-        # Flatten gathered_results into a single list of dictionaries
-        kfold_results = [result for worker_results in gathered_results for result in worker_results]
-        
     # Aggregate results and log metrics (only on rank 0)
     if rank == 0:
-        fold_epoch_losses = [result["epoch_losses"] for result in kfold_results]
+        gathered_results = [item for sublist in gathered_results for item in sublist]
+        fold_epoch_losses = [result["epoch_losses"] for result in gathered_results]
         num_epochs = len(fold_epoch_losses[0])  # Assumes all folds have the same number of epochs
         mean_epoch_losses = [
             round(np.mean([fold_losses[epoch_idx] for fold_losses in fold_epoch_losses]), 4)
@@ -424,12 +407,12 @@ def distributed_pipeline(config):
         
         # Calculate mean metrics across folds
         mean_metrics = {
-            "accuracy": round(np.mean([result["evaluation_metrics"]["accuracy"] for result in kfold_results]), 4),
-            "precision": round(np.mean([result["evaluation_metrics"]["precision"] for result in kfold_results]), 4),
-            "recall": round(np.mean([result["evaluation_metrics"]["recall"] for result in kfold_results]), 4),
-            "f1": round(np.mean([result["evaluation_metrics"]["f1"] for result in kfold_results]), 4),
-            "roc_auc": round(np.mean([result["evaluation_metrics"]["roc_auc"] for result in kfold_results]), 4),
-            "fold_duration": round(np.mean([result["fold_duration"] for result in kfold_results]), 4),
+            "accuracy": round(np.mean([result["evaluation_metrics"]["accuracy"] for result in gathered_results]), 4),
+            "precision": round(np.mean([result["evaluation_metrics"]["precision"] for result in gathered_results]), 4),
+            "recall": round(np.mean([result["evaluation_metrics"]["recall"] for result in gathered_results]), 4),
+            "f1": round(np.mean([result["evaluation_metrics"]["f1"] for result in gathered_results]), 4),
+            "roc_auc": round(np.mean([result["evaluation_metrics"]["roc_auc"] for result in gathered_results]), 4),
+            "fold_duration": round(np.mean([result["fold_duration"] for result in gathered_results]), 4),
         }
         config["results"]["Mean Accuracy"] = mean_metrics["accuracy"]
         config["results"]["Mean Precision"] = mean_metrics["precision"]
@@ -456,7 +439,7 @@ def distributed_pipeline(config):
         
         log_text.append(f"\n--- Duration per Fold ---")
         log_text.append(f"Mean Time Per Fold:   {mean_metrics['fold_duration']} seconds\n")
-        for result in kfold_results:
+        for result in gathered_results:
             fold_idx = result["fold_idx"]
             log_text.append(f"Fold {fold_idx+1} Duration:   {result['fold_duration']} seconds")
         

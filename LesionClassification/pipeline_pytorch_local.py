@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import time
 import json
+import datetime
 from PIL import Image
 import torch
 import torch.nn as nn
@@ -333,17 +334,27 @@ def distributed_pipeline(config):
             result = kfold_cross_validation(config, fold_idx, train_data, test_data, cnn_feature_columns)
             kfold_results.append(result)
 
+    # print(f"Rank: {rank}")
+    # print(kfold_results)
     # Gather results across ranks
     if rank == 0:
         gathered_results = [None for _ in range(world_size)]
     else:
         gathered_results = None
-
+        
     dist.gather_object(kfold_results, gathered_results)
+
+    
+    dist.barrier()
+    # print(gathered_results)
     
     # Aggregate results and log metrics (only on rank 0)
     if rank == 0:
-        fold_epoch_losses = [result["epoch_losses"] for result in kfold_results]
+        gathered_results = [item for sublist in gathered_results for item in sublist]  # ✅ Flatten
+        print(gathered_results)
+
+        # Now safely extract epoch losses
+        fold_epoch_losses = [result["epoch_losses"] for result in gathered_results]
         num_epochs = len(fold_epoch_losses[0])  # Assumes all folds have the same number of epochs
         mean_epoch_losses = [
             round(np.mean([fold_losses[epoch_idx] for fold_losses in fold_epoch_losses]), 4)
@@ -352,12 +363,12 @@ def distributed_pipeline(config):
         
         # Calculate mean metrics across folds
         mean_metrics = {
-            "accuracy": round(np.mean([result["evaluation_metrics"]["accuracy"] for result in kfold_results]), 4),
-            "precision": round(np.mean([result["evaluation_metrics"]["precision"] for result in kfold_results]), 4),
-            "recall": round(np.mean([result["evaluation_metrics"]["recall"] for result in kfold_results]), 4),
-            "f1": round(np.mean([result["evaluation_metrics"]["f1"] for result in kfold_results]), 4),
-            "roc_auc": round(np.mean([result["evaluation_metrics"]["roc_auc"] for result in kfold_results]), 4),
-            "fold_duration": round(np.mean([result["fold_duration"] for result in kfold_results]), 4),
+            "accuracy": round(np.mean([result["evaluation_metrics"]["accuracy"] for result in gathered_results]), 4),
+            "precision": round(np.mean([result["evaluation_metrics"]["precision"] for result in gathered_results]), 4),
+            "recall": round(np.mean([result["evaluation_metrics"]["recall"] for result in gathered_results]), 4),
+            "f1": round(np.mean([result["evaluation_metrics"]["f1"] for result in gathered_results]), 4),
+            "roc_auc": round(np.mean([result["evaluation_metrics"]["roc_auc"] for result in gathered_results]), 4),
+            "fold_duration": round(np.mean([result["fold_duration"] for result in gathered_results]), 4),
         }
         config["results"]["Mean Accuracy"] = mean_metrics["accuracy"]
         config["results"]["Mean Precision"] = mean_metrics["precision"]
@@ -384,13 +395,13 @@ def distributed_pipeline(config):
         
         log_text.append(f"\n--- Duration per Fold ---")
         log_text.append(f"Mean Time Per Fold:   {mean_metrics['fold_duration']} seconds\n")
-        for result in kfold_results:
+        for result in gathered_results:
             fold_idx = result["fold_idx"]
             log_text.append(f"Fold {fold_idx+1} Duration:   {result['fold_duration']} seconds")
         
         log_text.append(f"\n--- Mean Loss Per Epoch Across All Folds ---")
         for epoch_idx, mean_loss in enumerate(mean_epoch_losses, start=1):
-            log_text.append(f"Epoch [{epoch_idx}/{config["epochs"]}], Mean Loss: {mean_loss:.4f}")
+            log_text.append(f"Epoch [{epoch_idx}/{config['epochs']}], Mean Loss: {mean_loss:.4f}")
             
         # Log mean metrics
         log_text.append(f"\n--- Mean Metrics Across All Folds ---")
@@ -441,7 +452,7 @@ def main():
         "rank":  rank,
         "world_size": world_size,
         "epochs": 10,
-        "tabular_data": data_1_path,
+        "tabular_data": test_data_path,
         "image_data": images_folder,
         "log_text": log_text,
         "results": results,
@@ -460,6 +471,7 @@ def main():
         results["Nodes"] = config["world_size"]
         
         # --- Identify dataset number and size ---
+        dataset_number = None
         tabular_file = os.path.basename(config["tabular_data"])  # Extract filename
         if tabular_file in datasets:
             dataset_number = int(tabular_file.split("_")[1].split(".")[0])  # Extract dataset number (1, 2, 3)
@@ -471,7 +483,7 @@ def main():
         else:
             dataset_info = f"Dataset Used: {tabular_file}"
             log_filename = f"unknown_data_pytorch_log.txt"
-            results["Dataset"] = "unknown"
+            # results["Dataset"] = "unknown"
             
         # Log pipeline initialization
         log_text.append(f"======================================")
