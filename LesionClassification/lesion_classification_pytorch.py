@@ -62,6 +62,8 @@ class ClassifierNN(nn.Module):
     
 
 def setup(rank, world_size):
+    os.environ['MASTER_ADDR'] = '192.168.0.1'
+    os.environ['MASTER_PORT'] = '29500'
     dist.init_process_group("gloo", rank=rank, world_size=world_size)
     torch.manual_seed(21)
     
