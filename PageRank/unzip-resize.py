@@ -37,19 +37,16 @@ def reduce_file_size(input, data, target_size_gb):
         with open(input, 'r') as input_file, open(data, 'w') as data_file:
             data_file.write("node1,node2\n")
 
-            first_line_skipped = False  # Track if the first 3-value line is skipped
+            first_line_skipped = False  
 
             for line in input_file:
-                # Skip comment lines and the first data line with 3 values
                 if line.startswith('%') or line.startswith('#'):
                     continue
 
-                # Check for three-column first line (e.g., 41652230 41652230 1468365182)
                 if not first_line_skipped and len(line.strip().split()) == 3:
                     first_line_skipped = True
-                    continue  # Skip the first line with 3 columns
+                    continue  
 
-                # Process the remaining two-column lines
                 csv_line = ','.join(line.strip().split()[:2]) + '\n'
                 data_file.write(csv_line)
 
@@ -67,7 +64,7 @@ def reduce_file_size(input, data, target_size_gb):
         print(f"An error occurred during resizing: {e}")
 
 
-# Get file size in MB and GB
+
 def get_file_size(file_path):
     try:
         file_size = os.path.getsize(file_path)
@@ -80,17 +77,16 @@ def get_file_size(file_path):
         print(f"An error occurred while getting file size: {e}")
 
 
-# Paths (modify these based on your setup)
-zip_path = r'C:\Users\anton\Downloads\twitter7.mtx.zip'  # Path to the zip file
-extract_to = r'C:\Users\anton\Desktop\Pytorch data'      # Extraction directory
+zip_path = r'C:\Users\Downloads\twitter7.mtx.zip'  # Path to the zip file
+extract_to = r'C:\Users\Desktop\Pytorch data'      # Extraction directory
 mtx_file = os.path.join(extract_to, 'twitter7.mtx')      # Extracted .mtx file path
 
 # File paths for resized data
-data_file = r'C:\Users\anton\Desktop\Pytorch data\twitter7_10gb.csv'
-data_file_1 = r'C:\Users\anton\Desktop\Pytorch data\twitter7_1gb.csv'
-data_file_2 = r'C:\Users\anton\Desktop\Pytorch data\twitter7_2.5gb.csv'
-data_test = r'C:\Users\anton\Desktop\Pytorch data\twitter7_100mb.csv'
-data_file_3 = r'C:\Users\anton\Desktop\Pytorch data\twitter7_1mb.csv'
+data_file = r'C:\Users\Desktop\Pytorch data\twitter7_10gb.csv'
+data_file_1 = r'C:\Users\Desktop\Pytorch data\twitter7_1gb.csv'
+data_file_2 = r'C:\Users\Desktop\Pytorch data\twitter7_2.5gb.csv'
+data_test = r'C:\Users\Desktop\Pytorch data\twitter7_100mb.csv'
+data_file_3 = r'C:\Users\Desktop\Pytorch data\twitter7_1mb.csv'
 
 # Uncomment to extract and inspect the file
 # unzip_twitter_mtx(zip_path, extract_to)
@@ -105,6 +101,3 @@ data_file_3 = r'C:\Users\anton\Desktop\Pytorch data\twitter7_1mb.csv'
 #reduce_file_size(mtx_file, data_test, 0.1)     # 100MB test version
 
 
-#reduce_file_size(mtx_file, data_file_3, 0.001)     # 1MB test version
-
-read_after_comments(data_test, 30)

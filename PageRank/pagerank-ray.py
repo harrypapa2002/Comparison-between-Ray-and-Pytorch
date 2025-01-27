@@ -9,9 +9,6 @@ import pyarrow.fs as fs
 import pyarrow.csv as pv
 import ray
 
-# -------------------------------------------------------------------------
-# Utility functions
-# -------------------------------------------------------------------------
 
 def get_alive_nodes():
     return len([n for n in ray.nodes() if n["Alive"]])
@@ -27,7 +24,6 @@ def aggregate_dicts(main_dict, partial_dict):
     return main_dict
 
 def top_k(scores_dict, k):
-    # Sort in descending order of score
     items = sorted(scores_dict.items(), key=lambda x: x[1], reverse=True)
     return dict(items[:k])
 
@@ -81,9 +77,6 @@ def cleanup_intermediate():
             if fname.startswith("result_chunk_") and fname.endswith(".json"):
                 os.remove(os.path.join(path, fname))
 
-# -------------------------------------------------------------------------
-# Data transformation
-# -------------------------------------------------------------------------
 
 def format_input(chunk):
     nodes1 = chunk[:, 0].tolist()
@@ -101,13 +94,10 @@ def page_rank_per_chunk(chunk_data):
     pr_scores = page_rank(edge_index=edge_index).tolist()
     return node_list, pr_scores
 
-# -------------------------------------------------------------------------
-# Ray Task
-# -------------------------------------------------------------------------
 
 @ray.remote
 def process_chunk_remote(chunk_data):
-    dataset = chunk_data  # chunk_data is a PyArrow Table
+    dataset = chunk_data  
     nodes1 = dataset.column('node1').to_pylist()
     nodes2 = dataset.column('node2').to_pylist()
     all_nodes = list(set(nodes1 + nodes2))
@@ -117,15 +107,12 @@ def process_chunk_remote(chunk_data):
     mapped_nodes2 = [node_map[n] for n in nodes2]
     edge_index = torch.tensor([mapped_nodes1, mapped_nodes2], dtype=torch.long)
     scores = page_rank(edge_index=edge_index).tolist()
-    # Build partial dict
     partial_dict = {}
     for idx, node_id in enumerate(all_nodes):
         partial_dict[node_id] = scores[idx]
     return partial_dict
 
-# -------------------------------------------------------------------------
-# Final display
-# -------------------------------------------------------------------------
+
 
 def display_results(start_time, final_scores, config):
     end_time = time.time()
@@ -143,7 +130,7 @@ def display_results(start_time, final_scores, config):
     else:
         normalized_top10 = top_nodes
 
-    msg = (
+    ssh ubuntu@snf-77326.ok-kno.grnetcloud.netmsg = (
         f"File {config['datafile']} - using Ray\n"
         f"Alive Ray Nodes: {alive_nodes}\n"
         f"Execution Time (seconds): {elapsed:.2f}\n"
@@ -158,12 +145,8 @@ def display_results(start_time, final_scores, config):
     with open(os.path.join(results_dir, fname), 'w') as f:
         f.write(msg)
 
-# -------------------------------------------------------------------------
-# Main
-# -------------------------------------------------------------------------
 
 def distributed_pagerank_ray():
-    # Adjust to your actual CSV/hdfs config
     config = {
         "datafile": "twitter7/twitter7_5gb.csv",
         "batch_size": 1024 * 1024 * 10,
@@ -181,25 +164,21 @@ def distributed_pagerank_ray():
     with hdfs.open_input_file(file_path) as f:
         reader = pv.open_csv(f, read_options=pv.ReadOptions(block_size=config["batch_size"]))
         for i, chunk in enumerate(reader):
-            # Dispatch remote tasks for each chunk
             fut = process_chunk_remote.remote(chunk)
             futures.append(fut)
 
-            # Every 10 chunks, gather partial results to relieve memory
+            
             if (i+1) % 20 == 0:
                 partial_dict_list = ray.get(futures)
                 futures = []
                 merged_dict = {}
                 for pd in partial_dict_list:
                     merged_dict = aggregate_dicts(merged_dict, pd)
-                # Keep top 10k to limit size
                 merged_dict = top_k(merged_dict, 10000)
-                # Save partial results to disk
                 save_intermediate_results(merged_dict, f"chunk_{i+1}")
                 merged_dict.clear()
                 gc.collect()
 
-    # Gather final results if any remain
     if futures:
         partial_dict_list = ray.get(futures)
         futures = []
@@ -211,7 +190,7 @@ def distributed_pagerank_ray():
         merged_dict.clear()
         gc.collect()
 
-    # At this point, multiple result_chunk_* files are on disk
+    
     final_scores = load_and_merge_intermediate_results(top_k_size=10000)
     final_scores = normalize_scores(final_scores)
 

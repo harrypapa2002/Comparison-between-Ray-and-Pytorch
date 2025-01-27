@@ -201,7 +201,7 @@ def distributed_pagerank(rank, world_size):
     if global_results:
         save_intermediate_results(global_results, 'final',rank)
     
-    #dist.barrier()
+    dist.barrier()
 
     if rank == 0:
         aggregated_results = aggregate_results()
