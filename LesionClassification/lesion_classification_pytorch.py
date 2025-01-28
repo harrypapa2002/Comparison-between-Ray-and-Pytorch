@@ -391,7 +391,12 @@ def distributed_pipeline(config):
     else:
         gathered_results = None
 
-    dist.gather_object(kfold_results, gathered_results)
+    # dist.gather_object(kfold_results, gathered_results)
+    
+    try:
+        dist.gather_object(kfold_results, gathered_results)
+    except RuntimeError as e:
+        print(f"[Rank {rank}] Error in gathering results: {e}")
     
     dist.barrier()
     
