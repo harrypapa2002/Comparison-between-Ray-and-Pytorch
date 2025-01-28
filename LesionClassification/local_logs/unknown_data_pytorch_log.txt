@@ -10,28 +10,28 @@ Dataset Used: release_midas_test.xlsx
           Feature Vector Extraction
 =============================================
 
-Total Feature Extraction Duration: 28.38 seconds
+Total Feature Extraction Duration: 53.75 seconds
 
 
 ============================================
           10 Fold Cross Validation
 ============================================
 
-Total 10-Fold Duration: 5.0 seconds
+Total 10-Fold Duration: 7.99 seconds
 
 --- Duration per Fold ---
-Mean Time Per Fold:   1.2934 seconds
+Mean Time Per Fold:   2.028 seconds
 
-Fold 1 Duration:   1.2449932098388672 seconds
-Fold 4 Duration:   1.3530094623565674 seconds
-Fold 7 Duration:   1.3635551929473877 seconds
-Fold 10 Duration:   0.982987642288208 seconds
-Fold 2 Duration:   1.2630045413970947 seconds
-Fold 5 Duration:   1.390010118484497 seconds
-Fold 8 Duration:   1.3295519351959229 seconds
-Fold 3 Duration:   1.233992338180542 seconds
-Fold 6 Duration:   1.4119796752929688 seconds
-Fold 9 Duration:   1.360543966293335 seconds
+Fold 1 Duration:   2.0490128993988037 seconds
+Fold 4 Duration:   2.045987606048584 seconds
+Fold 7 Duration:   2.11655330657959 seconds
+Fold 10 Duration:   1.7319386005401611 seconds
+Fold 2 Duration:   2.057990789413452 seconds
+Fold 5 Duration:   2.0339789390563965 seconds
+Fold 8 Duration:   2.065563201904297 seconds
+Fold 3 Duration:   2.0529890060424805 seconds
+Fold 6 Duration:   2.046987771987915 seconds
+Fold 9 Duration:   2.0785553455352783 seconds
 
 --- Mean Loss Per Epoch Across All Folds ---
 Epoch [1/10], Mean Loss: 0.6772
@@ -53,4 +53,4 @@ Mean F1 Score:  0.8076
 Mean AUC-ROC:   0.8035
 
 
-Total Pipeline Duration: 34.6 seconds
+Total Pipeline Duration: 64.58 seconds

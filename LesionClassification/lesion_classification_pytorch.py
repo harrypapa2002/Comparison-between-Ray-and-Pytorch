@@ -367,19 +367,19 @@ def distributed_pipeline(config):
         
     cross_validation_start_time = time.time()
     
+    # Step 2: Precompute all fold indices and store them in a list WITH INDEX
     kf = KFold(n_splits=10, shuffle=True, random_state=21)
-    
-    # Step 1: Precompute all fold indices and store them in a list WITH INDEX
     all_folds = [(fold_idx, train_idx, test_idx) for fold_idx, (train_idx, test_idx) in enumerate(kf.split(final_data))]
 
-    # Step 2: Manually assign folds to each worker (instead of modulus-based assignment)
-    assigned_folds = [all_folds[i] for i in range(rank, len(all_folds), world_size)]
+    # Step 3: Manually assign folds to each worker (distribute evenly)
+    assigned_folds = all_folds[rank::world_size]
 
     
     kfold_results = []
 
     # Step 3: Process assigned folds
     for fold_idx, train_idx, test_idx in assigned_folds:
+        print(f"[Rank {rank}] Processing Fold {fold_idx}...") 
         train_data = final_data.iloc[train_idx]
         test_data = final_data.iloc[test_idx]
         result = kfold_cross_validation(config, fold_idx, train_data, test_data, cnn_feature_columns)
@@ -387,7 +387,7 @@ def distributed_pipeline(config):
         
     # Gather results across ranks
     if rank == 0:
-        gathered_results = [None for _ in range(world_size)]
+        gathered_results = [[] for _ in range(world_size)] # [] instead of None
     else:
         gathered_results = None
 
@@ -397,7 +397,10 @@ def distributed_pipeline(config):
     
     # Aggregate results and log metrics (only on rank 0)
     if rank == 0:
-        gathered_results = [item for sublist in gathered_results for item in sublist]
+        gathered_results = [item for sublist in gathered_results for item in sublist] #Flatten Lists
+        print(f"[Rank 0] Cross-validation completed. Collected {len(gathered_results)} folds.")
+        
+        
         fold_epoch_losses = [result["epoch_losses"] for result in gathered_results]
         num_epochs = len(fold_epoch_losses[0])  # Assumes all folds have the same number of epochs
         mean_epoch_losses = [
