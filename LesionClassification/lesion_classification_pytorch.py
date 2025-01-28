@@ -372,7 +372,10 @@ def distributed_pipeline(config):
     all_folds = [(fold_idx, train_idx, test_idx) for fold_idx, (train_idx, test_idx) in enumerate(kf.split(final_data))]
 
     # Step 3: Manually assign folds to each worker (distribute evenly)
-    assigned_folds = all_folds[rank::world_size]
+    assigned_folds = all_folds[rank::world_size] if len(all_folds) > rank else []
+    print(f"[Rank {rank}] Assigned Folds: {assigned_folds}")
+    if not assigned_folds:
+        print(f"[Rank {rank}] No assigned folds. Skipping...")
 
     
     kfold_results = []
@@ -397,7 +400,8 @@ def distributed_pipeline(config):
     # dist.gather_object(kfold_results, gathered_results)
     
     try:
-        dist.gather_object(kfold_results, gathered_results)
+        # Even if no work was assigned, ranks must send an empty list.
+        dist.gather_object(kfold_results if kfold_results else [], gathered_results)
     except RuntimeError as e:
         print(f"[Rank {rank}] Error in gathering results: {e}")
     
