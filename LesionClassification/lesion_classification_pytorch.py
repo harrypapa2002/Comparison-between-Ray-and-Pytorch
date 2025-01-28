@@ -341,7 +341,7 @@ def distributed_pipeline(config):
     cnn_feature_columns = to_broadcast[1]
 
     # Cleanup distributed environment
-    cleanup()
+    # cleanup()
 
     if rank == 0:
         print("Data preprocessing completed.")
@@ -360,7 +360,7 @@ def distributed_pipeline(config):
     =============================
     """
     
-    setup(rank, world_size)
+    # setup(rank, world_size)
     print(f"[Rank {rank}] Setup complete. World size: {world_size}")
     
     if rank == 0:
