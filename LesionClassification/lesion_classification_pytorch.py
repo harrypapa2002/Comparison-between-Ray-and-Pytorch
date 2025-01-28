@@ -359,8 +359,7 @@ def distributed_pipeline(config):
         Training and Testing
     =============================
     """
-    
-    # setup(rank, world_size)
+
     print(f"[Rank {rank}] Setup complete. World size: {world_size}")
     
     if rank == 0:
@@ -428,7 +427,7 @@ def distributed_pipeline(config):
             "recall": round(np.mean([result["evaluation_metrics"]["recall"] for result in gathered_results]), 4),
             "f1": round(np.mean([result["evaluation_metrics"]["f1"] for result in gathered_results]), 4),
             "roc_auc": round(np.mean([result["evaluation_metrics"]["roc_auc"] for result in gathered_results]), 4),
-            "fold_duration": round(np.mean([result["fold_duration"] for result in gathered_results]), 4),
+            "fold_duration": round(np.mean([result["fold_duration"] for result in gathered_results]), 2),
         }
         config["results"]["Mean Accuracy"] = mean_metrics["accuracy"]
         config["results"]["Mean Precision"] = mean_metrics["precision"]
@@ -457,7 +456,7 @@ def distributed_pipeline(config):
         log_text.append(f"Mean Time Per Fold:   {mean_metrics['fold_duration']} seconds\n")
         for result in gathered_results:
             fold_idx = result["fold_idx"]
-            log_text.append(f"Fold {fold_idx+1} Duration:   {result['fold_duration']} seconds")
+            log_text.append(f"Fold {fold_idx+1} Duration:   {result['fold_duration']:.2f} seconds")
         
         log_text.append(f"\n--- Mean Loss Per Epoch Across All Folds ---")
         for epoch_idx, mean_loss in enumerate(mean_epoch_losses, start=1):
@@ -555,7 +554,7 @@ def main():
         log_text.append(f"======================================")
         log_text.append(f"      Pipeline Execution Summary")
         log_text.append(f"======================================")
-        log_text.append(f"\nNumber of Nodes: {config['world_size']/config['num_procs']}")
+        log_text.append(f"\nNumber of Nodes: {int(config['world_size']/config['num_procs'])}")
         log_text.append(dataset_info)  # Add dataset name and size (if available)
 
     pipeline_start_time = time.time()

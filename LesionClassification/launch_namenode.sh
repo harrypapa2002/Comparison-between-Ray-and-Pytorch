@@ -15,7 +15,7 @@ MASTER_ADDR="namenode"
 MASTER_PORT=29500
 NNODES=3
 NPROC_PER_NODE=4
-WORLD_SIZE=$((NNODES * NPROC_PER_NODE))  # 12
+WORLD_SIZE=$((NNODES * NPROC_PER_NODE)) 
 
 # PyTorch Script Path (absolute path)
 PYTORCH_SCRIPT_PATH="/home/ubuntu/Comparison-between-Ray-and-Pytorch/LesionClassification/lesion_classification_pytorch.py"
