@@ -361,6 +361,7 @@ def distributed_pipeline(config):
     """
     
     setup(rank, world_size)
+    print(f"[Rank {rank}] Setup complete. World size: {world_size}")
     
     if rank == 0:
         print("Performing 10-Fold Cross Validation...")
@@ -379,7 +380,7 @@ def distributed_pipeline(config):
 
     
     kfold_results = []
-
+    print(f"[Rank {rank}] Ready to process folds...")
     # Step 3: Process assigned folds
     for fold_idx, train_idx, test_idx in assigned_folds:
         print(f"[Rank {rank}] Processing Fold {fold_idx}...") 
