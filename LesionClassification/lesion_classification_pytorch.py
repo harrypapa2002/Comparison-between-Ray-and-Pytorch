@@ -384,6 +384,9 @@ def distributed_pipeline(config):
         test_data = final_data.iloc[test_idx]
         result = kfold_cross_validation(config, fold_idx, train_data, test_data, cnn_feature_columns)
         kfold_results.append(result)
+        print(f"[Rank {rank}] for {fold_idx} got rersults {result}") 
+    
+    print(f"[Rank {rank}] got these results total: {kfold_results}") 
         
     # Gather results across ranks
     if rank == 0:
