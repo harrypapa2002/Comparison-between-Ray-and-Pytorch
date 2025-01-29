@@ -5,6 +5,7 @@ import time
 import json
 from PIL import Image
 import io
+import argparse
 from pyarrow.fs import HadoopFileSystem
 import torch
 import torch.nn as nn
@@ -409,12 +410,11 @@ def distributed_pipeline(config):
 
 
 def main():
-    tabular_data_path = "/data/mra_midas/release_midas.xlsx"
-    test_data_path = "/data/mra_midas/release_midas_test.xlsx"
-    data_1_path = "/data/mra_midas/data_1.xlsx"
-    data_2_path = "/data/mra_midas/data_2.xlsx"
-    data_3_path = "/data/mra_midas/data_3.xlsx"
-    images_folder = "/data/mra_midas/images"
+    parser = argparse.ArgumentParser(description="PyTorch Distributed Lesion Classification")
+    parser.add_argument("--tabular_data", type=str, required=True, help="Path to the tabular dataset (.xlsx)")
+    parser.add_argument("--image_data", type=str, required=True, help="Path to the folder containing images")
+
+    args = parser.parse_args()
     
     log_text = []
 
@@ -442,8 +442,8 @@ def main():
     config = {
         "hdfs_host": "192.168.0.1",
         "hdfs_port": 9000,
-        "tabular_data": data_1_path,
-        "image_data": images_folder,
+        "tabular_data": args.tabular_data,
+        "image_data": args.image_data,
         "log_text": log_text,
         "results": results,
         "rank":  rank,
