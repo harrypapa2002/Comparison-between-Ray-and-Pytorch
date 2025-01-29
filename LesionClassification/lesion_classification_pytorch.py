@@ -442,16 +442,16 @@ def main():
     config = {
         "hdfs_host": "192.168.0.1",
         "hdfs_port": 9000,
+        "tabular_data": data_1_path,
+        "image_data": images_folder,
+        "log_text": log_text,
+        "results": results,
         "rank":  rank,
         "world_size": world_size,
         "num_procs": 4,
         "epochs": 10,
-        "tabular_data": test_data_path,
-        "image_data": images_folder,
-        "log_text": log_text,
-        "results": results,
         "batch_size": 10,
-        "save_interval": 120,
+        "save_interval": 120
     }
 
     datasets = {
