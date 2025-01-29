@@ -284,7 +284,6 @@ def distributed_pipeline(config):
 
     dist.gather_object(feature_vectors, gathered_fv)
     dist.gather_object(image_ids, gathered_ids)
-
     dist.barrier()  
 
     if rank == 0:
@@ -349,16 +348,10 @@ def distributed_pipeline(config):
         gathered_results = None
 
     dist.gather_object(kfold_results, gathered_results)
-    
-    # try:
-    #     dist.gather_object(kfold_results if kfold_results else [], gathered_results)
-    # except RuntimeError as e:
-    #     print(f"[Rank {rank}] Error in gathering results: {e}")
-    
     dist.barrier()
 
     if rank == 0:
-        gathered_results = [item for sublist in gathered_results for item in sublist] 
+        # gathered_results = [item for sublist in gathered_results for item in sublist] 
         
         fold_epoch_losses = [result["epoch_losses"] for result in gathered_results]
         num_epochs = len(fold_epoch_losses[0]) 
