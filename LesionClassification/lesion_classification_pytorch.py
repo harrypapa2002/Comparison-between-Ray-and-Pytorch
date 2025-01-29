@@ -351,7 +351,7 @@ def distributed_pipeline(config):
     dist.barrier()
 
     if rank == 0:
-        # gathered_results = [item for sublist in gathered_results for item in sublist] 
+        gathered_results = [item for sublist in gathered_results for item in sublist] 
         
         fold_epoch_losses = [result["epoch_losses"] for result in gathered_results]
         num_epochs = len(fold_epoch_losses[0]) 
