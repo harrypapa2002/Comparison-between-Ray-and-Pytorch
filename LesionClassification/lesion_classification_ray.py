@@ -5,6 +5,7 @@ import time
 import json
 from PIL import Image
 import io
+import argparse
 from pyarrow.fs import HadoopFileSystem
 import ray
 import torch
@@ -361,11 +362,19 @@ def distributed_pipeline(config):
 
 
 def main():
-    tabular_data_path = "/data/mra_midas/release_midas.xlsx"
-    test_data_path = "/data/mra_midas/release_midas_test.xlsx"
-    data_1_path = "/data/mra_midas/data_1.xlsx"
-    data_2_path = "/data/mra_midas/data_2.xlsx"
-    data_3_path = "/data/mra_midas/data_3.xlsx"
+    parser = argparse.ArgumentParser(description="Ray Distributed Lesion Classification")
+    parser.add_argument("--dataset", type=str, required=True, choices=["data_1", "data_2", "data_3"],
+                        help="Choose the tabular dataset: data_1, data_2, or data_3")
+
+    args = parser.parse_args()
+    
+    tabular_data_paths = {
+        "data_1": "/data/mra_midas/data_1.xlsx",
+        "data_2": "/data/mra_midas/data_2.xlsx",
+        "data_3": "/data/mra_midas/data_3.xlsx"
+    }
+    
+    tabular_data_path = tabular_data_paths[args.dataset]
     images_folder = "/data/mra_midas/images"
     
     pipeline_start_time = time.time()
@@ -392,7 +401,7 @@ def main():
         "hdfs_host": "192.168.0.1",
         "hdfs_port": 9000,
         "num_nodes": get_num_nodes(),
-        "tabular_data": test_data_path,
+        "tabular_data": tabular_data_path,
         "image_data": images_folder,
         "log_text": log_text,
         "results": results,
