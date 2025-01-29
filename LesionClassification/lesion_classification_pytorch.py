@@ -264,7 +264,7 @@ def distributed_pipeline(config):
         local_results.extend(batch_results)
 
         if len(local_results) >= config["save_interval"] // config["batch_size"]:
-            fv_temp, id_temp = zip(*local_results)  # Unzip tuples
+            fv_temp, id_temp = zip(*local_results)
             feature_vectors.extend(fv_temp)
             image_ids.extend(id_temp)
             local_results = [] 
@@ -343,7 +343,7 @@ def distributed_pipeline(config):
         kfold_results.append(result)
 
     if rank == 0:
-        gathered_results = [[] for _ in range(world_size)] # [] instead of None
+        gathered_results = [None for _ in range(world_size)] # [] instead of None
     else:
         gathered_results = None
 
