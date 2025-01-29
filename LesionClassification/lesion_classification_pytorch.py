@@ -134,7 +134,7 @@ def train_and_test(config):
         epoch_loss = running_loss / len(train_loader)
         epoch_losses.append(epoch_loss)
         epoch_logs.append(f"Epoch [{epoch + 1}/{config['epochs']}], Loss: {epoch_loss:.4f}")
-        print(epoch_logs[-1])  # Log each epoch's loss
+        # print(epoch_logs[-1])  # Log each epoch's loss
 
     model.eval()
     all_labels = []
@@ -170,7 +170,7 @@ def train_and_test(config):
 
 def kfold_cross_validation(config, fold_idx, train_data, test_data, cnn_feature_columns):
     start_time = time.time()
-    print(f"Starting Fold {fold_idx + 1}...")
+    print(f"Rank {config['rank']}: Starting Fold {fold_idx + 1}...")
 
     train_set = MIDASDataset(train_data, cnn_feature_columns)
     test_set = MIDASDataset(test_data, cnn_feature_columns)
@@ -202,6 +202,7 @@ def kfold_cross_validation(config, fold_idx, train_data, test_data, cnn_feature_
         "epoch_losses": epoch_losses,
         "fold_duration": duration,
     }
+    print(f"Rank {config['rank']}: Completed Fold {fold_idx + 1}...")
     return result
 
 
@@ -343,16 +344,16 @@ def distributed_pipeline(config):
         kfold_results.append(result)
 
     if rank == 0:
-        gathered_results = [None for _ in range(world_size)] # [] instead of None
+        gathered_results = [None for _ in range(world_size)]
     else:
         gathered_results = None
 
-    # dist.gather_object(kfold_results, gathered_results)
+    dist.gather_object(kfold_results, gathered_results)
     
-    try:
-        dist.gather_object(kfold_results if kfold_results else [], gathered_results)
-    except RuntimeError as e:
-        print(f"[Rank {rank}] Error in gathering results: {e}")
+    # try:
+    #     dist.gather_object(kfold_results if kfold_results else [], gathered_results)
+    # except RuntimeError as e:
+    #     print(f"[Rank {rank}] Error in gathering results: {e}")
     
     dist.barrier()
 
