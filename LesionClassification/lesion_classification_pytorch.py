@@ -62,8 +62,8 @@ class ClassifierNN(nn.Module):
     
 
 def setup(rank, world_size):
-    os.environ['MASTER_ADDR'] = '192.168.0.1'
-    os.environ['MASTER_PORT'] = '29500'
+    # os.environ['MASTER_ADDR'] = '192.168.0.1'
+    # os.environ['MASTER_PORT'] = '29500'
     dist.init_process_group("gloo", rank=rank, world_size=world_size)
     torch.manual_seed(21)
     
@@ -73,30 +73,23 @@ def cleanup():
 
 
 def feature_vector_extraction(config, image_id, feature_extractor, hdfs):
-    """Extract feature vector from a single image."""
-
-    # Image preprocessing function
     preprocess = transforms.Compose([
-        transforms.Resize((224, 224)),  # Resize to 224x224
-        transforms.ToTensor(),  # Convert to tensor
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),  # Normalize for ResNet50
+        transforms.Resize((224, 224)),  
+        transforms.ToTensor(),  
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]), 
     ])
     
     try:
-        # Construct the full image path in HDFS
         image_path = f"{config['image_data']}/{image_id}"
 
-        # Read the image file as binary
         with hdfs.open_input_file(image_path) as file:
             image_data = file.read()
 
-        # Convert binary data to PIL image
         img = Image.open(io.BytesIO(image_data)).convert("RGB")
         
         img_tensor = preprocess(img)  
         preprocessed_img = img_tensor.unsqueeze(0)
 
-        # Extract feature vector
         with torch.no_grad():
             feature_vector = feature_extractor(preprocessed_img).squeeze().numpy().astype(np.float16)
         
@@ -108,13 +101,12 @@ def feature_vector_extraction(config, image_id, feature_extractor, hdfs):
 
 
 def batch_feature_extraction(config, batch, feature_extractor, hdfs):
-    """Extract features for a batch of images at once."""
     batch_results = []
     for image_id in batch:
         result = feature_vector_extraction(config, image_id, feature_extractor, hdfs)
         batch_results.append(result)
 
-    return batch_results  # Return results for the whole batch
+    return batch_results  
 
 
 def train_and_test(config):
@@ -127,7 +119,6 @@ def train_and_test(config):
 
     epoch_logs, epoch_losses = [], []
 
-    # Training loop
     for epoch in range(config["epochs"]):
         model.train()
         running_loss = 0.0
@@ -143,9 +134,8 @@ def train_and_test(config):
         epoch_loss = running_loss / len(train_loader)
         epoch_losses.append(epoch_loss)
         epoch_logs.append(f"Epoch [{epoch + 1}/{config['epochs']}], Loss: {epoch_loss:.4f}")
-        print(epoch_logs[-1])  # Log each epoch's loss
+        # print(epoch_logs[-1])  # Log each epoch's loss
 
-    # Evaluation
     model.eval()
     all_labels = []
     all_predictions = []
@@ -154,15 +144,13 @@ def train_and_test(config):
     with torch.no_grad():
         for inputs, labels in test_loader:
             outputs = model(inputs).squeeze()
-            probabilities = torch.sigmoid(outputs)  # Use sigmoid for binary classification
-            predictions = (probabilities >= 0.5).float()  # Threshold at 0.5
+            probabilities = torch.sigmoid(outputs)
+            predictions = (probabilities >= 0.5).float() 
 
-            # Collect labels, predictions, and probabilities
             all_labels.extend(labels.numpy())
             all_predictions.extend(predictions.numpy())
             all_probs.extend(probabilities.numpy())
 
-    # Compute metrics
     accuracy = accuracy_score(all_labels, all_predictions)
     precision = precision_score(all_labels, all_predictions, zero_division=0)
     recall = recall_score(all_labels, all_predictions, zero_division=0)
@@ -181,24 +169,19 @@ def train_and_test(config):
 
 
 def kfold_cross_validation(config, fold_idx, train_data, test_data, cnn_feature_columns):
-    """Perform training and testing for a single fold."""
-    
     start_time = time.time()
-    print(f"Starting Fold {fold_idx + 1}...")
-    
-    # Create datasets and loaders for this fold
+    print(f"Rank {config['rank']}: Starting Fold {fold_idx + 1}...")
+
     train_set = MIDASDataset(train_data, cnn_feature_columns)
     test_set = MIDASDataset(test_data, cnn_feature_columns)
     train_loader = DataLoader(train_set, batch_size=32, shuffle=True)   # config["batch_size"]
     test_loader = DataLoader(test_set, batch_size=32, shuffle=False)
 
-    # Initialize model, optimizer, and criterion
     input_dim = train_set.features.shape[1]
     model = ClassifierNN(input_dim)
-    optimizer = optim.Adam(model.parameters(), lr=0.001) #config["lr"]
+    optimizer = optim.Adam(model.parameters(), lr=0.001) 
     criterion = nn.BCEWithLogitsLoss()
 
-    # Update config for this fold
     fold_config = config.copy()
     fold_config.update({
         "model": model,
@@ -208,7 +191,6 @@ def kfold_cross_validation(config, fold_idx, train_data, test_data, cnn_feature_
         "optimizer": optimizer,
     })
 
-    # Perform training and evaluation
     epoch_logs, evaluation_metrics, epoch_losses = train_and_test(fold_config)
     
     duration = time.time() - start_time
@@ -220,6 +202,7 @@ def kfold_cross_validation(config, fold_idx, train_data, test_data, cnn_feature_
         "epoch_losses": epoch_losses,
         "fold_duration": duration,
     }
+    print(f"Rank {config['rank']}: Completed Fold {fold_idx + 1}...")
     return result
 
 
@@ -237,10 +220,10 @@ def distributed_pipeline(config):
     
     try:
         hdfs = HadoopFileSystem(host=config["hdfs_host"], port=config["hdfs_port"])
-        print(f"Connected to HDFS at {config['hdfs_host']}:{config['hdfs_port']}.")
+        print(f"Rank {rank}: Connected to HDFS at {config['hdfs_host']}:{config['hdfs_port']}.")
         
     except Exception as e:
-        print(f"Failed to connect to HDFS: {e}")
+        print(f"Rank {rank}: Failed to connect to HDFS: {e}")
         
     
     if rank == 0:
@@ -248,15 +231,14 @@ def distributed_pipeline(config):
     try:
         with hdfs.open_input_file(config["tabular_data"]) as file:
             tabular_data = pd.read_excel(file)
-            print(f"Successfully loaded {len(tabular_data)} rows from {config['tabular_data']}.")
+            print(f"Rank {rank}: Successfully loaded {len(tabular_data)} rows from {config['tabular_data']}.")
 
     except Exception as e:
-        print(f"Failed to load data from HDFS: {e}")
+        print(f"Rank {rank}: Failed to load data from HDFS: {e}")
         return None 
 
     preprocessed_data = tabular_data_preprocessing(tabular_data)
-    
-    # Setup distributed environment
+
     setup(rank, world_size)
 
     if rank == 0:
@@ -264,45 +246,35 @@ def distributed_pipeline(config):
         
     feature_extraction_start_time = time.time()
 
-        
-    # Load the ResNet50 model pre-trained on ImageNet
     base_model = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V1)
-    base_model.eval()  # Set to evaluation mode
+    base_model.eval() 
 
-    # Remove the fully connected layer (extract feature vectors only)
     feature_extractor = torch.nn.Sequential(*list(base_model.children())[:-1])
-    
-    # Step 1: Split images into batches    
-    all_images = list(preprocessed_data["midas_file_name"])  # Convert to list for slicing
+   
+    all_images = list(preprocessed_data["midas_file_name"]) 
     batches = [all_images[i:i + config["batch_size"]] for i in range(0, len(all_images), config["batch_size"])]
 
-    # Step 2: Manually assign batches to workers (instead of np.array_split)
     assigned_batches = [batches[i] for i in range(rank, len(batches), world_size)]
 
     feature_vectors, image_ids = [], []
-    local_results = []  # Temporary storage for intermediate results
+    local_results = [] 
 
-    # Step 3: Process batches
     for batch in assigned_batches:
         batch_results = batch_feature_extraction(config, batch, feature_extractor, hdfs)
 
-        # Store intermediate results in memory
         local_results.extend(batch_results)
 
-        # Step 4: Save intermediate results to prevent memory buildup
         if len(local_results) >= config["save_interval"] // config["batch_size"]:
-            fv_temp, id_temp = zip(*local_results)  # Unzip tuples
+            fv_temp, id_temp = zip(*local_results)
             feature_vectors.extend(fv_temp)
             image_ids.extend(id_temp)
-            local_results = []  # ✅ Reset batch futures
+            local_results = [] 
 
-    # Step 5: Save any remaining results
     if local_results:
         fv_temp, id_temp = zip(*local_results)
         feature_vectors.extend(fv_temp)
         image_ids.extend(id_temp)
 
-    # Step 6: Gather results across ranks
     if rank == 0:
         gathered_fv = [None for _ in range(world_size)]
         gathered_ids = [None for _ in range(world_size)]
@@ -312,10 +284,8 @@ def distributed_pipeline(config):
 
     dist.gather_object(feature_vectors, gathered_fv)
     dist.gather_object(image_ids, gathered_ids)
+    dist.barrier()  
 
-    dist.barrier()  # Synchronize all ranks before continuing
-
-    # Rank 0 aggregates the results
     if rank == 0:
         feature_vectors = np.vstack(gathered_fv)
         image_ids = np.hstack(gathered_ids)
@@ -323,10 +293,8 @@ def distributed_pipeline(config):
 
     feature_extraction_end_time = time.time()
     feature_extraction_duration = round(feature_extraction_end_time - feature_extraction_start_time, 2)
-    
-    # Combine features with preprocessed tabular data on rank 0
+
     if rank == 0:
-        
         config["results"]["Feature Extraction Time"] = feature_extraction_duration
         
         print("Combining features with preprocessed data...")
@@ -339,9 +307,6 @@ def distributed_pipeline(config):
 
     final_data = to_broadcast[0]
     cnn_feature_columns = to_broadcast[1]
-
-    # Cleanup distributed environment
-    # cleanup()
 
     if rank == 0:
         print("Data preprocessing completed.")
@@ -359,68 +324,42 @@ def distributed_pipeline(config):
         Training and Testing
     =============================
     """
-
-    print(f"[Rank {rank}] Setup complete. World size: {world_size}")
     
     if rank == 0:
         print("Performing 10-Fold Cross Validation...")
         
     cross_validation_start_time = time.time()
-    
-    # Step 2: Precompute all fold indices and store them in a list WITH INDEX
+
     kf = KFold(n_splits=10, shuffle=True, random_state=21)
     all_folds = [(fold_idx, train_idx, test_idx) for fold_idx, (train_idx, test_idx) in enumerate(kf.split(final_data))]
 
-    # Step 3: Manually assign folds to each worker (distribute evenly)
     assigned_folds = all_folds[rank::world_size] if len(all_folds) > rank else []
-    print(f"[Rank {rank}] Assigned Folds: {assigned_folds}")
-    if not assigned_folds:
-        print(f"[Rank {rank}] No assigned folds. Skipping...")
-
     
     kfold_results = []
-    print(f"[Rank {rank}] Ready to process folds...")
-    # Step 3: Process assigned folds
     for fold_idx, train_idx, test_idx in assigned_folds:
-        print(f"[Rank {rank}] Processing Fold {fold_idx}...") 
         train_data = final_data.iloc[train_idx]
         test_data = final_data.iloc[test_idx]
         result = kfold_cross_validation(config, fold_idx, train_data, test_data, cnn_feature_columns)
         kfold_results.append(result)
-        print(f"[Rank {rank}] for {fold_idx} got rersults {result}") 
-    
-    print(f"[Rank {rank}] got these results total: {kfold_results}") 
-        
-    # Gather results across ranks
+
     if rank == 0:
-        gathered_results = [[] for _ in range(world_size)] # [] instead of None
+        gathered_results = [None for _ in range(world_size)]
     else:
         gathered_results = None
 
-    # dist.gather_object(kfold_results, gathered_results)
-    
-    try:
-        # Even if no work was assigned, ranks must send an empty list.
-        dist.gather_object(kfold_results if kfold_results else [], gathered_results)
-    except RuntimeError as e:
-        print(f"[Rank {rank}] Error in gathering results: {e}")
-    
+    dist.gather_object(kfold_results, gathered_results)
     dist.barrier()
-    
-    # Aggregate results and log metrics (only on rank 0)
+
     if rank == 0:
-        gathered_results = [item for sublist in gathered_results for item in sublist] #Flatten Lists
-        print(f"[Rank 0] Cross-validation completed. Collected {len(gathered_results)} folds.")
-        
+        gathered_results = [item for sublist in gathered_results for item in sublist] 
         
         fold_epoch_losses = [result["epoch_losses"] for result in gathered_results]
-        num_epochs = len(fold_epoch_losses[0])  # Assumes all folds have the same number of epochs
+        num_epochs = len(fold_epoch_losses[0]) 
         mean_epoch_losses = [
             round(np.mean([fold_losses[epoch_idx] for fold_losses in fold_epoch_losses]), 4)
             for epoch_idx in range(num_epochs)
         ]
-        
-        # Calculate mean metrics across folds
+
         mean_metrics = {
             "accuracy": round(np.mean([result["evaluation_metrics"]["accuracy"] for result in gathered_results]), 4),
             "precision": round(np.mean([result["evaluation_metrics"]["precision"] for result in gathered_results]), 4),
@@ -446,7 +385,6 @@ def distributed_pipeline(config):
         config["results"]["Cross Validation Time"] = cross_validation_duration
         print("10-Fold Cross Validation Completed.")
 
-        # Log results
         log_text.append(f"\n\n============================================")
         log_text.append(f"          10 Fold Cross Validation")
         log_text.append(f"============================================")
@@ -461,8 +399,7 @@ def distributed_pipeline(config):
         log_text.append(f"\n--- Mean Loss Per Epoch Across All Folds ---")
         for epoch_idx, mean_loss in enumerate(mean_epoch_losses, start=1):
             log_text.append(f"Epoch [{epoch_idx}/{config['epochs']}], Mean Loss: {mean_loss:.4f}")
-            
-        # Log mean metrics
+
         log_text.append(f"\n--- Mean Metrics Across All Folds ---")
         log_text.append(f"Mean Accuracy:  {mean_metrics['accuracy']}")
         log_text.append(f"Mean Precision: {mean_metrics['precision']}")
@@ -471,9 +408,7 @@ def distributed_pipeline(config):
         log_text.append(f"Mean AUC-ROC:   {mean_metrics['roc_auc']}\n")
 
 
-
 def main():
-    
     tabular_data_path = "/data/mra_midas/release_midas.xlsx"
     test_data_path = "/data/mra_midas/release_midas_test.xlsx"
     data_1_path = "/data/mra_midas/data_1.xlsx"
@@ -482,8 +417,7 @@ def main():
     images_folder = "/data/mra_midas/images"
     
     log_text = []
-    
-    # --- Initialize results dictionary ---
+
     results = {
         "Framework": "pytorch",
         "Dataset": None,
@@ -498,12 +432,10 @@ def main():
         "Mean F1 Score": None,
         "Mean AUC-ROC": None
     }
-    
-    # Rank and world size from environment variables
+
     rank = int(os.getenv("RANK", -1))
     world_size = int(os.getenv("WORLD_SIZE", -1))
 
-    # Ensure proper environment variables are set
     if rank == -1 or world_size == -1:
         raise RuntimeError("Environment variables RANK and WORLD_SIZE must be set. Use torchrun to run the program.")
 
@@ -521,8 +453,7 @@ def main():
         "batch_size": 10,
         "save_interval": 120,
     }
-    
-    # Define data file paths and sizes (in GB)
+
     datasets = {
         "data_1.xlsx": 1.05,
         "data_2.xlsx": 2.16,
@@ -530,16 +461,14 @@ def main():
     }
     
     if rank == 0:
-        
         results["Nodes"] = int(config["world_size"]/config["num_procs"])
         print(f"Number of nodes: {int(config['world_size']/config['num_procs'])}")
         print(f"World size: {world_size}")
-        
-        # --- Identify dataset number and size ---
+
         dataset_number = None
-        tabular_file = os.path.basename(config["tabular_data"])  # Extract filename
+        tabular_file = os.path.basename(config["tabular_data"])  
         if tabular_file in datasets:
-            dataset_number = int(tabular_file.split("_")[1].split(".")[0])  # Extract dataset number (1, 2, 3)
+            dataset_number = int(tabular_file.split("_")[1].split(".")[0])  
             dataset_size = datasets[tabular_file]
             dataset_info = f"Dataset Used: {tabular_file} ({dataset_size:.2f} GB)"
             log_filename = f"pytorch_data{dataset_number}_node{int(config['world_size']/config['num_procs'])}.txt"
@@ -548,14 +477,12 @@ def main():
         else:
             dataset_info = f"Dataset Used: {tabular_file}"
             log_filename = f"unknown_data_pytorch_log.txt"
-            # results["Dataset"] = "unknown"
-            
-        # Log pipeline initialization
+
         log_text.append(f"======================================")
         log_text.append(f"      Pipeline Execution Summary")
         log_text.append(f"======================================")
         log_text.append(f"\nNumber of Nodes: {int(config['world_size']/config['num_procs'])}")
-        log_text.append(dataset_info)  # Add dataset name and size (if available)
+        log_text.append(dataset_info)  
 
     pipeline_start_time = time.time()
     
