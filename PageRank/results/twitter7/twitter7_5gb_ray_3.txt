@@ -1,4 +1,4 @@
-File twitter7/twitter7_5gb.csv - using Ray
+File twitter7/twitter7_5gb.csv - using Ray - batch size 31457280:
 Alive Ray Nodes: 3
 Execution Time (seconds): 2553.59
 Peak Memory Usage (MB): 2161.25
