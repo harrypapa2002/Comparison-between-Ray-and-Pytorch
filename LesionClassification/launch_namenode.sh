@@ -38,15 +38,6 @@ WORLD_SIZE=$((NNODES * NPROC_PER_NODE))
 # PyTorch Script Path (absolute path)
 PYTORCH_SCRIPT_PATH="/home/ubuntu/Comparison-between-Ray-and-Pytorch/LesionClassification/lesion_classification_pytorch.py"
 
-# ----------------------------
-# Select Dataset
-# ----------------------------
-TABULAR_DATA="/data/mra_midas/data_1.xlsx" 
-IMAGE_FOLDER="/data/mra_midas/images"
-
-if [ "$#" -ge 1 ]; then
-    TABULAR_DATA="/data/mra_midas/$1.xlsx" 
-fi
 
 # ----------------------------
 # Launch PyTorch Distributed Classification
