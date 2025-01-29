@@ -7,13 +7,31 @@
 # ============================================================
 
 # ----------------------------
-# Configuration Parameters
+# Default Configuration
 # ----------------------------
+DEFAULT_NNODES=1  
+DEFAULT_DATASET="data_1"  
+IMAGE_FOLDER="/data/mra_midas/images"
+
+# ----------------------------
+# Parse Command-Line Arguments
+# ----------------------------
+# Usage: ./launch_namenode.sh <NUM_NODES> <DATASET>
+if [ "$#" -ge 1 ]; then
+    NNODES=$1  
+else
+    NNODES=$DEFAULT_NNODES  
+fi
+
+if [ "$#" -ge 2 ]; then
+    TABULAR_DATA="/data/mra_midas/$2.xlsx"  
+else
+    TABULAR_DATA="/data/mra_midas/${DEFAULT_DATASET}.xlsx" 
+fi
 
 # Master Node Details
 MASTER_ADDR="namenode"
 MASTER_PORT=29500
-NNODES=1
 NPROC_PER_NODE=4
 WORLD_SIZE=$((NNODES * NPROC_PER_NODE)) 
 
@@ -21,7 +39,7 @@ WORLD_SIZE=$((NNODES * NPROC_PER_NODE))
 PYTORCH_SCRIPT_PATH="/home/ubuntu/Comparison-between-Ray-and-Pytorch/LesionClassification/lesion_classification_pytorch.py"
 
 # ----------------------------
-# Select Dataset (Modify as Needed)
+# Select Dataset
 # ----------------------------
 TABULAR_DATA="/data/mra_midas/data_1.xlsx" 
 IMAGE_FOLDER="/data/mra_midas/images"
@@ -35,6 +53,8 @@ fi
 # ----------------------------
 
 echo "Launching PyTorch Distributed Classification on Master Node (namenode)"
+echo "Number of Nodes: $NNODES"
+echo "World Size: $WORLD_SIZE"
 echo "Using Tabular Data: $TABULAR_DATA"
 echo "Using Image Folder: $IMAGE_FOLDER"
 
@@ -49,4 +69,4 @@ torchrun \
     --tabular_data "$TABULAR_DATA" \
     --image_data "$IMAGE_FOLDER"
 
-echo "PyTorch torchrun launched on namenode with node_rank=0."
+echo "PyTorch torchrun launched with nnodes=$NNODES and dataset=$TABULAR_DATA."
