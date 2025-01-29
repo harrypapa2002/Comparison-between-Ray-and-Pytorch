@@ -237,10 +237,10 @@ def distributed_pipeline(config):
     
     try:
         hdfs = HadoopFileSystem(host=config["hdfs_host"], port=config["hdfs_port"])
-        print(f"Connected to HDFS at {config['hdfs_host']}:{config['hdfs_port']}.")
+        print(f"Rank {rank}: Connected to HDFS at {config['hdfs_host']}:{config['hdfs_port']}.")
         
     except Exception as e:
-        print(f"Failed to connect to HDFS: {e}")
+        print(f"Rank {rank}: Failed to connect to HDFS: {e}")
         
     
     if rank == 0:
@@ -248,10 +248,10 @@ def distributed_pipeline(config):
     try:
         with hdfs.open_input_file(config["tabular_data"]) as file:
             tabular_data = pd.read_excel(file)
-            print(f"Successfully loaded {len(tabular_data)} rows from {config['tabular_data']}.")
+            print(f"Rank {rank}: Successfully loaded {len(tabular_data)} rows from {config['tabular_data']}.")
 
     except Exception as e:
-        print(f"Failed to load data from HDFS: {e}")
+        print(f"Rank {rank}: Failed to load data from HDFS: {e}")
         return None 
 
     preprocessed_data = tabular_data_preprocessing(tabular_data)
@@ -294,7 +294,7 @@ def distributed_pipeline(config):
             fv_temp, id_temp = zip(*local_results)  # Unzip tuples
             feature_vectors.extend(fv_temp)
             image_ids.extend(id_temp)
-            local_results = []  # ✅ Reset batch futures
+            local_results = [] 
 
     # Step 5: Save any remaining results
     if local_results:
@@ -360,7 +360,7 @@ def distributed_pipeline(config):
     =============================
     """
 
-    print(f"[Rank {rank}] Setup complete. World size: {world_size}")
+    # print(f"[Rank {rank}] Setup complete. World size: {world_size}")
     
     if rank == 0:
         print("Performing 10-Fold Cross Validation...")
@@ -373,23 +373,23 @@ def distributed_pipeline(config):
 
     # Step 3: Manually assign folds to each worker (distribute evenly)
     assigned_folds = all_folds[rank::world_size] if len(all_folds) > rank else []
-    print(f"[Rank {rank}] Assigned Folds: {assigned_folds}")
-    if not assigned_folds:
-        print(f"[Rank {rank}] No assigned folds. Skipping...")
+    # print(f"[Rank {rank}] Assigned Folds: {assigned_folds}")
+    # if not assigned_folds:
+    #     print(f"[Rank {rank}] No assigned folds. Skipping...")
 
     
     kfold_results = []
-    print(f"[Rank {rank}] Ready to process folds...")
+    # print(f"[Rank {rank}] Ready to process folds...")
     # Step 3: Process assigned folds
     for fold_idx, train_idx, test_idx in assigned_folds:
-        print(f"[Rank {rank}] Processing Fold {fold_idx}...") 
+        # print(f"[Rank {rank}] Processing Fold {fold_idx}...") 
         train_data = final_data.iloc[train_idx]
         test_data = final_data.iloc[test_idx]
         result = kfold_cross_validation(config, fold_idx, train_data, test_data, cnn_feature_columns)
         kfold_results.append(result)
-        print(f"[Rank {rank}] for {fold_idx} got rersults {result}") 
+        # print(f"[Rank {rank}] for {fold_idx} got rersults {result}") 
     
-    print(f"[Rank {rank}] got these results total: {kfold_results}") 
+    # print(f"[Rank {rank}] got these results total: {kfold_results}") 
         
     # Gather results across ranks
     if rank == 0:
@@ -410,7 +410,7 @@ def distributed_pipeline(config):
     # Aggregate results and log metrics (only on rank 0)
     if rank == 0:
         gathered_results = [item for sublist in gathered_results for item in sublist] #Flatten Lists
-        print(f"[Rank 0] Cross-validation completed. Collected {len(gathered_results)} folds.")
+        # print(f"[Rank 0] Cross-validation completed. Collected {len(gathered_results)} folds.")
         
         
         fold_epoch_losses = [result["epoch_losses"] for result in gathered_results]
