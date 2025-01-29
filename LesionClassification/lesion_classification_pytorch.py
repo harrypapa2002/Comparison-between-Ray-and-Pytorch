@@ -134,7 +134,6 @@ def train_and_test(config):
         epoch_loss = running_loss / len(train_loader)
         epoch_losses.append(epoch_loss)
         epoch_logs.append(f"Epoch [{epoch + 1}/{config['epochs']}], Loss: {epoch_loss:.4f}")
-        # print(epoch_logs[-1])  # Log each epoch's loss
 
     model.eval()
     all_labels = []
@@ -392,6 +391,7 @@ def distributed_pipeline(config):
         
         log_text.append(f"\n--- Duration per Fold ---")
         log_text.append(f"Mean Time Per Fold:   {mean_metrics['fold_duration']} seconds\n")
+        gathered_results.sort(key=lambda x: x["fold_idx"])
         for result in gathered_results:
             fold_idx = result["fold_idx"]
             log_text.append(f"Fold {fold_idx+1} Duration:   {result['fold_duration']:.2f} seconds")
