@@ -130,7 +130,7 @@ def display_results(start_time, final_scores, config):
     else:
         normalized_top10 = top_nodes
 
-    ssh ubuntu@snf-77326.ok-kno.grnetcloud.netmsg = (
+    msg = (
         f"File {config['datafile']} - using Ray\n"
         f"Alive Ray Nodes: {alive_nodes}\n"
         f"Execution Time (seconds): {elapsed:.2f}\n"

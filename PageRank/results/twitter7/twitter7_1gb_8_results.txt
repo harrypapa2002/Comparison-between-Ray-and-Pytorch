@@ -1,4 +1,4 @@
-File twitter7/twitter7_1gb - number of worker machines 8 - batch size 52428800:
+File twitter7/twitter7_1gb - number of worker machines 8 - batch size 31457280:
 Execution Time (seconds): 608.21
 Peak Memory Usage (MB): 1805.58
 Virtual Memory Usage (MB): 7818.02

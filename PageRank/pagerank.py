@@ -27,14 +27,12 @@ class GraphDataset(Dataset):
         return self.edges[:, idx]
 
 
-# Distributed setup for VMs
 def setup(rank, world_size):
     os.environ['MASTER_ADDR'] = '192.168.0.1'
     os.environ['MASTER_PORT'] = '29500'
     dist.init_process_group("gloo", rank=rank, world_size=world_size)
 
 
-# Clean up process group and intermediate files
 def cleanup():
     rank = dist.get_rank()
     dist.destroy_process_group()
@@ -46,7 +44,6 @@ def cleanup():
                 os.remove(os.path.join(temp_dir, file))
 
 
-# Format input edges and map nodes to indices
 def format_input(chunk):
     nodes1 = chunk[:, 0].tolist()
     nodes2 = chunk[:, 1].tolist()
@@ -64,14 +61,19 @@ def format_input(chunk):
 
     return torch.stack([nodes1_tensor, nodes2_tensor], dim=0), all_nodes
 
-
-# Normalize final PageRank scores
 def normalize_page_rank(scores):
     total_score = scores.sum()
     return scores / total_score
 
+def top_k(scores_dict, k):
+    items = sorted(scores_dict.items(), key=lambda x: x[1], reverse=True)
+    return dict(items[:k])
 
-# Save intermediate results
+def aggregate_dicts(main_dict, partial_dict):
+    for node, score in partial_dict.items():
+        main_dict[node] = main_dict.get(node, 0.0) + score
+    return main_dict
+
 def save_intermediate_results(results, chunk_id,rank):
     path = '~/Comparison-between-Ray-and-Pytorch/PageRank/intermediate_results'
     full_path = os.path.expanduser(path)
@@ -81,18 +83,16 @@ def save_intermediate_results(results, chunk_id,rank):
     final_file = os.path.join(full_path, f'result_chunk_{chunk_id}_rank_{rank}.json')
 
     try:
-        # Write to a temporary file first
         with open(temp_file, 'w') as f:
             json.dump(results, f)
 
-        # Rename the temp file to final to ensure atomic write
         os.replace(temp_file, final_file)
 
         print(f"Intermediate results for chunk {chunk_id} saved successfully.")
     except Exception as e:
         print(f"Error saving intermediate results for chunk {chunk_id}: {e}")
         if os.path.exists(temp_file):
-            os.remove(temp_file)  # Clean up temp file if error occurs
+            os.remove(temp_file)  
 
 def add_self_loops(edge_index, num_nodes):
     loop_index = torch.arange(0, num_nodes, dtype=torch.long).unsqueeze(0).repeat(2, 1)
@@ -103,7 +103,6 @@ def prune_disconnected_nodes(edge_index):
     unique_nodes = torch.unique(edge_index)
     node_map = {old.item(): new for new, old in enumerate(unique_nodes)}
     
-    # Filter out edges with unmapped nodes
     mapped_edges = []
     for i in range(edge_index.size(1)):
         src, dst = edge_index[:, i]
@@ -116,7 +115,6 @@ def prune_disconnected_nodes(edge_index):
     mapped_edges = torch.tensor(mapped_edges, dtype=torch.long).t()
     return mapped_edges, len(unique_nodes)
 
-# Aggregate intermediate results
 def aggregate_results():
     directory = os.path.expanduser('~/Comparison-between-Ray-and-Pytorch/PageRank/intermediate_results')
     aggregated = {}
@@ -130,7 +128,6 @@ def aggregate_results():
     return aggregated
 
 
-# Display and save results to file
 def display_results(start_time, aggregated_results, config):
     end_time = time.time()
     execution_time = end_time - start_time
@@ -159,7 +156,6 @@ def display_results(start_time, aggregated_results, config):
         f.write(results_text)
 
 
-# Distributed PageRank computation
 def distributed_pagerank(rank, world_size):
     config = {
         "datafile": "twitter7/twitter7_5gb.csv",
