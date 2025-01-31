@@ -5,8 +5,8 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 
-RESULTS_DIR = "C://Users//anton//Desktop//Pytorch//Pytorch//PageRank//results//twitter7"  #/results
-OUTPUT_DIR = "C://Users//anton//Desktop//Pytorch//Pytorch//PageRank//output" #/output
+RESULTS_DIR = "/results"
+OUTPUT_DIR =  "/output"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 def infer_dataset_size(filename):
