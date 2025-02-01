@@ -1,8 +1,0 @@
-======================================
-      Pipeline Execution Summary
-======================================
-
-Number of Nodes: 1
-Dataset Used: 1.xlsx
-
-Total Pipeline Duration: 4.02 seconds
