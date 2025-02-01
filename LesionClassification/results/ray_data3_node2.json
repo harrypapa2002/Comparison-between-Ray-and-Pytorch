@@ -1,0 +1,14 @@
+{
+    "Framework": "ray",
+    "Dataset": 3,
+    "Nodes": 2,
+    "Total Time": 341.8,
+    "Feature Extraction Time": 313.99,
+    "Cross Validation Time": 21.07,
+    "Mean Time per Fold": 11.13,
+    "Mean Accuracy": 0.6831,
+    "Mean Precision": 0.7019,
+    "Mean Recall": 0.6886,
+    "Mean F1 Score": 0.6856,
+    "Mean AUC-ROC": 0.7621
+}
