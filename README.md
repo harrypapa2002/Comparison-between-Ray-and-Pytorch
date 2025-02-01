@@ -70,7 +70,7 @@ NYC_YellowTaxiTrip/
 - **maps/**: HTML visualizations of cluster centers.
 - **output/**: Figures and CSV files summarizing performance metrics such as execution times and silhouette scores.
 - **results/**: JSON results from clustering runs.
-- **compare_results.py**: Utility script for comparing clustering outputs.
+- **compare_results.py**: Utility script for comparing clustering outputs and execution times.
 - **launch_namenode.sh**: Placeholder script for environment initialization.
 - **nyc_taxi_pytorch_cluster.py** / **nyc_taxi_ray_cluster.py**: Clustering implementations using PyTorch or Ray.
 </details>
