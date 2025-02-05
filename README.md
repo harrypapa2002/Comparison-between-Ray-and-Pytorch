@@ -34,8 +34,9 @@ The repository is divided into three top-level folders, each corresponding to on
 LesionClassification/
 ├── data/
 ├── logs/
+├── output/
 ├── results/
-├── create_results_file.py
+├── compare_results.py
 ├── launch_namenode.sh
 ├── lesion_classification_pytorch.py
 ├── lesion_classification_ray.py
@@ -45,8 +46,9 @@ LesionClassification/
 **Key Points:**
 - **data/**: Lesion datasets in `.xlsx` format.
 - **logs/**: Example log files generated during training or execution.
+- **output/**: Figures and CSV files summarizing performance metrics such as execution times and mean evaluation metrics.
 - **results/**: JSON output files summarizing experiment metrics.
-- **create_results_file.py**: Helper script to parse logs and generate summarized results.
+- **compare_results.py**: Utility script for comparing evaluation metrics and execution times.
 - **launch_namenode.sh**: Placeholder script for initializing environment resources.
 - **lesion_classification_pytorch.py** / **lesion_classification_ray.py**: Implementations of lesion classification using PyTorch or Ray.
 - **preprocessing_functions.py**: Shared data loading and preprocessing methods.
@@ -106,7 +108,7 @@ PageRank/
 This project explores and compares two distributed computing frameworks—**Ray** and **PyTorch**—in the context of big data analytics and machine learning. The implementations cover the following tasks:
 
 - **Lesion Classification**  
-  Evaluate the performance of Ray and PyTorch in running a lesion classification pipeline on medical imaging data.
+  Evaluate the performance of Ray and PyTorch in running a lesion classification pipeline on medical imaging and tabular data.
 
 - **NYC Yellow Taxi Trip Clustering**  
   Perform geospatial clustering on NYC taxi trip data to uncover common pickup locations and assess clustering quality.
