@@ -85,7 +85,7 @@ PageRank/
 ├── output
 ├── results/
 │   └── twitter7/
-├── graph_results.py
+├── compare_results.py
 ├── launch.sh
 ├── pagerank-ray.py
 ├── pagerank.py
